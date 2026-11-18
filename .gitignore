@@ -1,0 +1,34 @@
+# Ambiente virtuale
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Database
+data/*.db
+data/*.sqlite3
+
+# Log
+logs/*.log
+
+# Screenshot e report generati
+screenshots/*
+reports/*
+
+# Configurazioni riservate
+.env
+config/api_keys.py
+
+# Build
+build/
+dist/
+*.spec
+
+# IDE
+.vscode/
+
+# Database locali
+data/*.db
+data/*.db-shm
+data/*.db-wal
