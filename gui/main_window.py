@@ -1,7 +1,14 @@
 import json
 import re
+from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread
+from app_paths import get_writable_dir
+
+from app_paths import get_writable_dir
+from urllib.parse import urlsplit
+
+from PySide6.QtCore import Qt, QThread, QObject, Signal
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -23,26 +30,68 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QGroupBox,
     QTabWidget,
+    QComboBox,
 )
 
 from gui.scan_worker import ScanWorker
 from services.risk_scoring_service import RiskScoringService
+from services.report_export_service import ReportExportService
+from services.screenshot_service import capture_authorised_site
+from modules.screenshot_visual_analyzer import ScreenshotVisualAnalyzer
+
+
+
+
+class ScreenshotCaptureWorker(QObject):
+    completed = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, url, authorised_host, output_dir):
+        super().__init__()
+        self.url = url
+        self.authorised_host = authorised_host
+        self.output_dir = output_dir
+
+    def run(self):
+        try:
+            result = capture_authorised_site(
+                self.url,
+                {self.authorised_host},
+                self.output_dir,
+            )
+            self.completed.emit(result)
+        except Exception as exc:
+            self.failed.emit(str(exc))
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, scanner_engine=None, database_service=None):
+    def __init__(
+        self,
+        scanner_engine=None,
+        database_service=None,
+        scheduled_scan_manager=None,
+    ):
         super().__init__()
 
         self.scanner_engine = scanner_engine
         self.database_service = database_service
+        self.scheduled_scan_manager = scheduled_scan_manager
         self.risk_scoring_service = RiskScoringService()
+        self.report_export_service = ReportExportService()
+        self.last_scan_result = None
 
         self.scan_thread = None
         self.scan_worker = None
 
         self.image_path = None
         self.comparison_image_path = None
+        self.screenshot_reference_path = None
+        self.last_screenshot_result = None
+        self.last_screenshot_record_id = None
+        self.screenshot_thread = None
+        self.screenshot_worker = None
         self.module_status_labels = {}
+        self._close_requested = False
 
         self.setWindowTitle("Domain Intelligence")
         self.setMinimumSize(1050, 760)
@@ -50,6 +99,18 @@ class MainWindow(QMainWindow):
 
         self.create_interface()
         self.load_history()
+        self.load_schedules()
+        self.load_screenshot_history()
+        if self.scheduled_scan_manager is not None:
+            self.scheduled_scan_manager.status_changed.connect(
+                self.on_scheduled_status_changed
+            )
+            self.scheduled_scan_manager.schedule_completed.connect(
+                self.on_scheduled_event
+            )
+            self.scheduled_scan_manager.schedule_failed.connect(
+                self.on_scheduled_event
+            )
 
     def create_interface(self):
         scroll = QScrollArea()
@@ -292,6 +353,18 @@ class MainWindow(QMainWindow):
         self.copy_results_button.setObjectName("secondaryButton")
         self.copy_results_button.clicked.connect(self.copy_results)
         results_header.addWidget(self.copy_results_button)
+
+        self.export_pdf_button = QPushButton("Esporta PDF")
+        self.export_pdf_button.setObjectName("secondaryButton")
+        self.export_pdf_button.setEnabled(False)
+        self.export_pdf_button.clicked.connect(self.export_scan_pdf)
+        results_header.addWidget(self.export_pdf_button)
+
+        self.export_csv_button = QPushButton("Esporta CSV")
+        self.export_csv_button.setObjectName("secondaryButton")
+        self.export_csv_button.setEnabled(False)
+        self.export_csv_button.clicked.connect(self.export_scan_csv)
+        results_header.addWidget(self.export_csv_button)
         results_layout.addLayout(results_header)
 
         self.results_tabs = QTabWidget()
@@ -341,6 +414,216 @@ class MainWindow(QMainWindow):
             "Il JSON completo della scansione apparirà qui."
         )
         self.results_tabs.addTab(self.results_output, "JSON completo")
+
+        # Scheduled scans management
+        schedules_page = QWidget()
+        schedules_layout = QVBoxLayout(schedules_page)
+        schedules_layout.setContentsMargins(14, 14, 14, 14)
+        schedules_layout.setSpacing(12)
+
+        schedules_intro = QLabel(
+            "Crea e gestisci controlli ricorrenti. Le scansioni pianificate "
+            "usano esclusivamente moduli passivi e vengono eseguite mentre "
+            "Domain Intelligence è aperto."
+        )
+        schedules_intro.setObjectName("hint")
+        schedules_intro.setWordWrap(True)
+        schedules_layout.addWidget(schedules_intro)
+
+        schedule_form = QFrame()
+        schedule_form.setObjectName("metricTile")
+        schedule_form_layout = QGridLayout(schedule_form)
+        schedule_form_layout.setContentsMargins(14, 12, 14, 12)
+        schedule_form_layout.setHorizontalSpacing(10)
+        schedule_form_layout.setVerticalSpacing(8)
+
+        schedule_form_layout.addWidget(QLabel("DOMINIO"), 0, 0)
+        self.schedule_domain_input = QLineEdit()
+        self.schedule_domain_input.setPlaceholderText("es. example.com")
+        self.schedule_domain_input.setText(self.domain_input.text().strip())
+        self.domain_input.textChanged.connect(self.schedule_domain_input.setText)
+        schedule_form_layout.addWidget(self.schedule_domain_input, 1, 0)
+
+        schedule_form_layout.addWidget(QLabel("FREQUENZA"), 0, 1)
+        self.schedule_interval_combo = QComboBox()
+        self.schedule_interval_combo.addItem("Ogni 15 minuti", 15)
+        self.schedule_interval_combo.addItem("Ogni 30 minuti", 30)
+        self.schedule_interval_combo.addItem("Ogni ora", 60)
+        self.schedule_interval_combo.addItem("Ogni 3 ore", 180)
+        self.schedule_interval_combo.addItem("Ogni 6 ore", 360)
+        self.schedule_interval_combo.addItem("Ogni 12 ore", 720)
+        self.schedule_interval_combo.addItem("Ogni 24 ore", 1440)
+        self.schedule_interval_combo.addItem("Ogni 7 giorni", 10080)
+        self.schedule_interval_combo.addItem("Ogni 30 giorni", 43200)
+        schedule_form_layout.addWidget(self.schedule_interval_combo, 1, 1)
+
+        schedule_form_layout.addWidget(QLabel("MODULI PASSIVI"), 2, 0, 1, 2)
+        self.schedule_module_checks = {}
+        schedule_module_grid = QGridLayout()
+        passive_schedule_modules = [
+            ("Domain Scanner", "domain_scanner"),
+            ("Subdomain Finder", "subdomain_finder"),
+            ("Similar Domain Finder", "similar_domain_analyzer"),
+            ("Threat Intelligence", "threat_intel_analyzer"),
+        ]
+        for index, (label, module_key) in enumerate(passive_schedule_modules):
+            check = QCheckBox(label)
+            check.setChecked(True)
+            self.schedule_module_checks[module_key] = check
+            schedule_module_grid.addWidget(check, index // 2, index % 2)
+        schedule_form_layout.addLayout(schedule_module_grid, 3, 0, 1, 2)
+
+        self.create_schedule_button = QPushButton("CREA PIANIFICAZIONE")
+        self.create_schedule_button.setObjectName("primaryButton")
+        self.create_schedule_button.clicked.connect(self.create_schedule)
+        schedule_form_layout.addWidget(self.create_schedule_button, 4, 0, 1, 2)
+        schedules_layout.addWidget(schedule_form)
+
+        schedule_actions = QHBoxLayout()
+        self.refresh_schedules_button = QPushButton("Aggiorna elenco")
+        self.refresh_schedules_button.setObjectName("secondaryButton")
+        self.refresh_schedules_button.clicked.connect(self.load_schedules)
+        schedule_actions.addWidget(self.refresh_schedules_button)
+        self.toggle_schedule_button = QPushButton("Attiva / Disattiva")
+        self.toggle_schedule_button.setObjectName("secondaryButton")
+        self.toggle_schedule_button.clicked.connect(self.toggle_selected_schedule)
+        schedule_actions.addWidget(self.toggle_schedule_button)
+        self.delete_schedule_button = QPushButton("Elimina")
+        self.delete_schedule_button.setObjectName("secondaryButton")
+        self.delete_schedule_button.clicked.connect(self.delete_selected_schedule)
+        schedule_actions.addWidget(self.delete_schedule_button)
+        schedule_actions.addStretch()
+        schedules_layout.addLayout(schedule_actions)
+
+        self.schedules_table = QTableWidget()
+        self.schedules_table.setColumnCount(9)
+        self.schedules_table.setHorizontalHeaderLabels([
+            "ID", "Nome", "Dominio", "Intervallo", "Stato",
+            "Prossima esecuzione (UTC)", "Ultima esecuzione (UTC)",
+            "Esecuzioni", "Errori"
+        ])
+        self.schedules_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.schedules_table.horizontalHeader().setStretchLastSection(True)
+        self.schedules_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.schedules_table.setSelectionMode(
+            QTableWidget.SelectionMode.SingleSelection
+        )
+        self.schedules_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.schedules_table.setAlternatingRowColors(True)
+        self.schedules_table.setMinimumHeight(260)
+        schedules_layout.addWidget(self.schedules_table, 1)
+
+        self.schedule_status_label = QLabel("Nessuna pianificazione caricata.")
+        self.schedule_status_label.setObjectName("statusText")
+        self.schedule_status_label.setWordWrap(True)
+        schedules_layout.addWidget(self.schedule_status_label)
+
+        self.results_tabs.addTab(schedules_page, "Monitoraggio programmato")
+
+        # Authorized website screenshot capture and visual comparison
+        screenshot_page = QWidget()
+        screenshot_layout = QVBoxLayout(screenshot_page)
+        screenshot_layout.setContentsMargins(14, 14, 14, 14)
+        screenshot_layout.setSpacing(12)
+
+        screenshot_notice = QLabel(
+            "Acquisizione consentita esclusivamente per siti che controlli o per cui "
+            "hai un'autorizzazione esplicita. Il browser non effettua login, non invia "
+            "form e blocca richieste verso host non autorizzati."
+        )
+        screenshot_notice.setObjectName("hint")
+        screenshot_notice.setWordWrap(True)
+        screenshot_layout.addWidget(screenshot_notice)
+
+        capture_card = QFrame()
+        capture_card.setObjectName("metricTile")
+        capture_form = QGridLayout(capture_card)
+        capture_form.setContentsMargins(14, 12, 14, 12)
+        capture_form.setHorizontalSpacing(10)
+        capture_form.setVerticalSpacing(8)
+
+        capture_form.addWidget(QLabel("URL HTTPS"), 0, 0)
+        self.screenshot_url_input = QLineEdit()
+        self.screenshot_url_input.setPlaceholderText("https://tuo-dominio.example")
+        capture_form.addWidget(self.screenshot_url_input, 1, 0, 1, 2)
+
+        capture_form.addWidget(QLabel("HOST AUTORIZZATO (ESATTO)"), 2, 0)
+        self.screenshot_authorised_host_input = QLineEdit()
+        self.screenshot_authorised_host_input.setPlaceholderText("tuo-dominio.example")
+        capture_form.addWidget(self.screenshot_authorised_host_input, 3, 0)
+
+        self.screenshot_authorisation_check = QCheckBox(
+            "Confermo di controllare questo dominio o di avere autorizzazione esplicita"
+        )
+        capture_form.addWidget(self.screenshot_authorisation_check, 3, 1)
+
+        self.capture_screenshot_button = QPushButton("ACQUISISCI SCREENSHOT")
+        self.capture_screenshot_button.setObjectName("primaryButton")
+        self.capture_screenshot_button.clicked.connect(self.start_screenshot_capture)
+        capture_form.addWidget(self.capture_screenshot_button, 4, 0, 1, 2)
+        screenshot_layout.addWidget(capture_card)
+
+        reference_row = QHBoxLayout()
+        self.screenshot_reference_button = QPushButton("Seleziona screenshot di riferimento")
+        self.screenshot_reference_button.setObjectName("secondaryButton")
+        self.screenshot_reference_button.clicked.connect(self.select_screenshot_reference)
+        reference_row.addWidget(self.screenshot_reference_button)
+        self.screenshot_reference_label = QLabel("Nessun riferimento selezionato")
+        self.screenshot_reference_label.setObjectName("filePath")
+        self.screenshot_reference_label.setWordWrap(True)
+        reference_row.addWidget(self.screenshot_reference_label, 1)
+        self.compare_screenshots_button = QPushButton("Confronta")
+        self.compare_screenshots_button.setObjectName("secondaryButton")
+        self.compare_screenshots_button.clicked.connect(self.compare_screenshots)
+        self.compare_screenshots_button.setEnabled(False)
+        reference_row.addWidget(self.compare_screenshots_button)
+        screenshot_layout.addLayout(reference_row)
+
+        self.screenshot_status_label = QLabel("In attesa di acquisizione.")
+        self.screenshot_status_label.setObjectName("statusText")
+        self.screenshot_status_label.setWordWrap(True)
+        screenshot_layout.addWidget(self.screenshot_status_label)
+
+        preview_row = QHBoxLayout()
+        self.screenshot_reference_preview = QLabel("Screenshot di riferimento")
+        self.screenshot_reference_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.screenshot_reference_preview.setMinimumHeight(280)
+        self.screenshot_reference_preview.setObjectName("screenshotPreview")
+        self.screenshot_preview = QLabel("Screenshot acquisito")
+        self.screenshot_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.screenshot_preview.setMinimumHeight(280)
+        self.screenshot_preview.setObjectName("screenshotPreview")
+        preview_style = (
+            "QLabel#screenshotPreview { background:#F7FAFC; border:1px dashed #B8C7D1; "
+            "border-radius:10px; color:#718096; padding:12px; }"
+        )
+        self.screenshot_reference_preview.setStyleSheet(preview_style)
+        self.screenshot_preview.setStyleSheet(preview_style)
+        reference_preview_column = QVBoxLayout()
+        reference_preview_column.addWidget(QLabel("RIFERIMENTO"))
+        reference_preview_column.addWidget(self.screenshot_reference_preview, 1)
+        captured_preview_column = QVBoxLayout()
+        captured_preview_column.addWidget(QLabel("ACQUISITO"))
+        captured_preview_column.addWidget(self.screenshot_preview, 1)
+        preview_row.addLayout(reference_preview_column, 1)
+        preview_row.addLayout(captured_preview_column, 1)
+        screenshot_layout.addLayout(preview_row, 1)
+
+        self.screenshot_history_table = self._create_results_table(
+            ["ID", "Dominio", "URL", "Titolo", "Acquisito (UTC)", "Somiglianza", "Valutazione"]
+        )
+        self.screenshot_history_table.setMinimumHeight(170)
+        self.screenshot_history_table.cellDoubleClicked.connect(self.open_screenshot_history_record)
+        screenshot_layout.addWidget(QLabel("Storico screenshot — doppio clic per visualizzare"))
+        screenshot_layout.addWidget(self.screenshot_history_table)
+
+        self.results_tabs.addTab(screenshot_page, "Screenshot e confronto")
 
         results_layout.addWidget(self.results_tabs)
         root.addWidget(results_card)
@@ -647,6 +930,226 @@ class MainWindow(QMainWindow):
             }
         """)
 
+
+    def start_screenshot_capture(self):
+        url = self.screenshot_url_input.text().strip()
+        authorised_host = self.screenshot_authorised_host_input.text().strip().lower().rstrip(".")
+        if not url or not authorised_host:
+            QMessageBox.warning(self, "Dati mancanti",
+                                "Inserisci URL HTTPS e hostname autorizzato.")
+            return
+        if not self.screenshot_authorisation_check.isChecked():
+            QMessageBox.warning(
+                self, "Autorizzazione richiesta",
+                "Conferma di controllare il dominio o di avere autorizzazione esplicita."
+            )
+            return
+        parsed = urlsplit(url)
+        if parsed.scheme.lower() != "https" or not parsed.hostname:
+            QMessageBox.warning(self, "URL non valido",
+                                "Inserisci un URL HTTPS completo.")
+            return
+        if parsed.hostname.rstrip(".").encode("idna").decode("ascii").lower() != authorised_host:
+            QMessageBox.warning(
+                self, "Host non corrispondente",
+                "L'hostname dell'URL deve corrispondere esattamente all'host autorizzato."
+            )
+            return
+        if self.screenshot_thread is not None and self.screenshot_thread.isRunning():
+            return
+
+        output_dir = get_writable_dir("screenshots")
+        self.capture_screenshot_button.setEnabled(False)
+        self.screenshot_status_label.setText("Acquisizione in corso nel browser isolato…")
+        self.screenshot_preview.setText("Acquisizione in corso…")
+
+        self.screenshot_thread = QThread(self)
+        self.screenshot_worker = ScreenshotCaptureWorker(url, authorised_host, output_dir)
+        self.screenshot_worker.moveToThread(self.screenshot_thread)
+        self.screenshot_thread.started.connect(self.screenshot_worker.run)
+        self.screenshot_worker.completed.connect(self.on_screenshot_captured)
+        self.screenshot_worker.failed.connect(self.on_screenshot_failed)
+        self.screenshot_worker.completed.connect(self.screenshot_thread.quit)
+        self.screenshot_worker.failed.connect(self.screenshot_thread.quit)
+        self.screenshot_thread.finished.connect(self.screenshot_worker.deleteLater)
+        self.screenshot_thread.finished.connect(self.on_screenshot_thread_finished)
+        self.screenshot_thread.finished.connect(self._complete_deferred_close)
+        self.screenshot_thread.finished.connect(self.screenshot_thread.deleteLater)
+        self.screenshot_thread.start()
+
+    def on_screenshot_captured(self, result):
+        self.last_screenshot_result = result
+        pixmap = QPixmap(result.screenshot_path)
+        if not pixmap.isNull():
+            self.screenshot_preview.setPixmap(
+                pixmap.scaled(
+                    self.screenshot_preview.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+        self.screenshot_status_label.setText(
+            f"Acquisito {result.hostname} — {result.title or 'senza titolo'} | "
+            f"{result.page_width} × {result.page_height} px\n"
+            f"File: {result.screenshot_path}"
+        )
+        self.compare_screenshots_button.setEnabled(bool(self.screenshot_reference_path))
+        if self.database_service is not None:
+            try:
+                saved_record = self.database_service.save_screenshot_record(result)
+                self.last_screenshot_record_id = saved_record.get("id")
+                self.load_screenshot_history()
+            except Exception as exc:
+                self.screenshot_status_label.setText(
+                    self.screenshot_status_label.text() + f"\nAvviso: storico non salvato: {exc}"
+                )
+
+    def on_screenshot_failed(self, error):
+        self.screenshot_status_label.setText(f"Acquisizione non riuscita: {error}")
+        self.screenshot_preview.setText("Screenshot non disponibile.")
+        QMessageBox.warning(self, "Screenshot non riuscito", error)
+
+    def on_screenshot_thread_finished(self):
+        self.capture_screenshot_button.setEnabled(True)
+        self.screenshot_thread = None
+        self.screenshot_worker = None
+
+    def select_screenshot_reference(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Seleziona screenshot di riferimento", "",
+            "Immagini (*.png *.jpg *.jpeg *.bmp *.webp)"
+        )
+        if file_path:
+            self.screenshot_reference_path = file_path
+            self.screenshot_reference_label.setText(file_path)
+            reference_pixmap = QPixmap(file_path)
+            if not reference_pixmap.isNull():
+                self.screenshot_reference_preview.setPixmap(
+                    reference_pixmap.scaled(
+                        self.screenshot_reference_preview.size(),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                )
+            self.compare_screenshots_button.setEnabled(
+                self.last_screenshot_result is not None
+            )
+
+    def compare_screenshots(self):
+        if self.last_screenshot_result is None or not self.screenshot_reference_path:
+            QMessageBox.information(
+                self, "Confronto non disponibile",
+                "Acquisisci uno screenshot e seleziona un riferimento."
+            )
+            return
+        try:
+            comparison = ScreenshotVisualAnalyzer().compare(
+                self.screenshot_reference_path,
+                self.last_screenshot_result.screenshot_path,
+            )
+            summary = (
+                f"Somiglianza visiva: {comparison.similarity_percent}%\n"
+                f"Distanza pHash: {comparison.phash_distance}\n"
+                f"Valutazione: {comparison.assessment}\n\n"
+                f"Nota: {comparison.disclaimer}"
+            )
+            self.screenshot_status_label.setText(summary)
+            if self.database_service is not None and self.last_screenshot_record_id is not None:
+                self.database_service.update_screenshot_comparison(
+                    self.last_screenshot_record_id,
+                    {
+                        "reference_path": comparison.reference_path,
+                        "similarity_percent": comparison.similarity_percent,
+                        "phash_distance": comparison.phash_distance,
+                        "assessment": comparison.assessment,
+                    },
+                )
+                self.load_screenshot_history()
+        except Exception as exc:
+            QMessageBox.warning(self, "Errore confronto", str(exc))
+
+    def load_screenshot_history(self):
+        if self.database_service is None or not hasattr(self, "screenshot_history_table"):
+            return
+        try:
+            records = self.database_service.get_screenshot_history()
+            self.screenshot_history_table.setRowCount(len(records))
+            for row, record in enumerate(records):
+                similarity = (
+                    f"{record['similarity_percent']}%"
+                    if record.get("similarity_percent") is not None else "—"
+                )
+                values = [
+                    str(record["id"]),
+                    record["domain"],
+                    record.get("url") or "—",
+                    record.get("page_title") or "—",
+                    (record.get("captured_at") or "—").replace("T", " ")[:19],
+                    similarity,
+                    record.get("assessment") or "Non confrontato",
+                ]
+                for column, value in enumerate(values):
+                    cell = QTableWidgetItem(str(value))
+                    if column == 0:
+                        cell.setData(Qt.ItemDataRole.UserRole, record["id"])
+                    self.screenshot_history_table.setItem(row, column, cell)
+        except Exception as exc:
+            self.screenshot_status_label.setText(f"Errore storico screenshot: {exc}")
+
+    def open_screenshot_history_record(self, row, column):
+        if self.database_service is None:
+            return
+        try:
+            id_item = self.screenshot_history_table.item(row, 0)
+            if id_item is None:
+                return
+            record_id = id_item.data(Qt.ItemDataRole.UserRole)
+            record = self.database_service.get_screenshot_record(record_id)
+            if not record:
+                return
+
+            candidate_path = record.get("screenshot_path")
+            reference_path = record.get("comparison_reference")
+            candidate = QPixmap(candidate_path or "")
+            if not candidate.isNull():
+                self.screenshot_preview.setPixmap(
+                    candidate.scaled(
+                        self.screenshot_preview.size(),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                )
+            else:
+                self.screenshot_preview.setText("File screenshot non disponibile.")
+
+            reference = QPixmap(reference_path or "")
+            if not reference.isNull():
+                self.screenshot_reference_preview.setPixmap(
+                    reference.scaled(
+                        self.screenshot_reference_preview.size(),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                )
+            else:
+                self.screenshot_reference_preview.setText(
+                    "Nessuna immagine di riferimento salvata."
+                )
+
+            self.screenshot_status_label.setText(
+                f"Storico #{record['id']} — {record['domain']}\n"
+                f"URL: {record.get('url') or '—'}\n"
+                f"Titolo: {record.get('page_title') or '—'}\n"
+                f"Acquisito: {record.get('captured_at') or '—'}\n"
+                f"Somiglianza: {record.get('similarity_percent') if record.get('similarity_percent') is not None else 'Non calcolata'}"
+                f"{'%' if record.get('similarity_percent') is not None else ''}\n"
+                f"Distanza pHash: {record.get('phash_distance') if record.get('phash_distance') is not None else '—'}\n"
+                f"Valutazione: {record.get('assessment') or 'Non confrontato'}\n"
+                "La somiglianza è un indicatore tecnico, non prova di clonazione o frode."
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Storico screenshot", str(exc))
+
     def select_image(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
@@ -748,6 +1251,20 @@ class MainWindow(QMainWindow):
         if self.scan_thread is not None and self.scan_thread.isRunning():
             return
 
+        if (
+            self.scheduled_scan_manager is not None
+            and self.scheduled_scan_manager.is_busy
+        ):
+            QMessageBox.information(
+                self,
+                "Scansione in corso",
+                "Attendi il completamento della scansione pianificata.",
+            )
+            return
+
+        if self.scheduled_scan_manager is not None:
+            self.scheduled_scan_manager.pause()
+
         self.scan_button.setEnabled(False)
         self.header_status.setText("SCANSIONE IN CORSO")
         self.progress_bar.setVisible(True)
@@ -772,10 +1289,14 @@ class MainWindow(QMainWindow):
         self.scan_worker.failed.connect(self.scan_thread.quit)
         self.scan_thread.finished.connect(self.scan_worker.deleteLater)
         self.scan_thread.finished.connect(self.on_scan_thread_finished)
+        self.scan_thread.finished.connect(self._complete_deferred_close)
         self.scan_thread.finished.connect(self.scan_thread.deleteLater)
         self.scan_thread.start()
 
     def on_scan_completed(self, result):
+        self.last_scan_result = result
+        self.export_pdf_button.setEnabled(True)
+        self.export_csv_button.setEnabled(True)
         try:
             if self.database_service is None:
                 raise RuntimeError("DatabaseService non disponibile.")
@@ -803,6 +1324,8 @@ class MainWindow(QMainWindow):
             self.progress_bar.setVisible(False)
             self.progress_bar.setRange(0, 100)
             self.progress_bar.setValue(100)
+            if self.scheduled_scan_manager is not None:
+                self.scheduled_scan_manager.resume()
 
     @staticmethod
     def _create_results_table(headers):
@@ -1104,10 +1627,52 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
         self.progress_bar.setRange(0, 100)
         QMessageBox.warning(self, "Errore di scansione", error)
+        if self.scheduled_scan_manager is not None:
+            self.scheduled_scan_manager.resume()
 
     def on_scan_thread_finished(self):
         self.scan_thread = None
         self.scan_worker = None
+        if self.scheduled_scan_manager is not None:
+            self.scheduled_scan_manager.resume()
+
+    def export_scan_pdf(self):
+        if self.last_scan_result is None:
+            QMessageBox.information(self, "Esportazione PDF", "Non ci sono risultati da esportare.")
+            return
+        default_name = f"domain_intelligence_{self.last_scan_result.domain}.pdf"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Esporta report PDF", default_name, "File PDF (*.pdf)"
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".pdf"):
+            path += ".pdf"
+        try:
+            self.report_export_service.export_pdf(self.last_scan_result, path)
+            self.status_label.setText(f"Report PDF salvato: {path}")
+            QMessageBox.information(self, "Esportazione completata", f"Report PDF creato:\\n{path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Errore esportazione PDF", str(exc))
+
+    def export_scan_csv(self):
+        if self.last_scan_result is None:
+            QMessageBox.information(self, "Esportazione CSV", "Non ci sono risultati da esportare.")
+            return
+        default_name = f"domain_intelligence_{self.last_scan_result.domain}.csv"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Esporta risultati CSV", default_name, "File CSV (*.csv)"
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".csv"):
+            path += ".csv"
+        try:
+            self.report_export_service.export_csv(self.last_scan_result, path)
+            self.status_label.setText(f"Risultati CSV salvati: {path}")
+            QMessageBox.information(self, "Esportazione completata", f"File CSV creato:\\n{path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Errore esportazione CSV", str(exc))
 
     def copy_results(self):
         text = self.results_output.toPlainText()
@@ -1144,6 +1709,156 @@ class MainWindow(QMainWindow):
                     )
                 )
         return "\n".join(lines)
+
+
+    @staticmethod
+    def _format_schedule_interval(minutes):
+        minutes = int(minutes)
+        if minutes < 60:
+            return f"Ogni {minutes} min"
+        if minutes % 1440 == 0:
+            days = minutes // 1440
+            return f"Ogni {days} g"
+        if minutes % 60 == 0:
+            hours = minutes // 60
+            return f"Ogni {hours} h"
+        return f"Ogni {minutes} min"
+
+    def create_schedule(self):
+        if self.database_service is None:
+            QMessageBox.warning(self, "Database non disponibile",
+                                "Il servizio database non è disponibile.")
+            return
+
+        domain = self.schedule_domain_input.text().strip()
+        selected_modules = [
+            key for key, check in self.schedule_module_checks.items()
+            if check.isChecked()
+        ]
+        interval = self.schedule_interval_combo.currentData()
+
+        if not selected_modules:
+            QMessageBox.warning(self, "Moduli mancanti",
+                                "Seleziona almeno un modulo passivo.")
+            return
+
+        try:
+            created = self.database_service.create_schedule(
+                domain=domain,
+                selected_modules=selected_modules,
+                interval_minutes=interval,
+            )
+            self.load_schedules()
+            self.schedule_status_label.setText(
+                f"Pianificazione #{created['id']} creata per {created['domain']}."
+            )
+            if self.scheduled_scan_manager is not None:
+                self.scheduled_scan_manager.resume()
+        except Exception as exc:
+            QMessageBox.warning(self, "Impossibile creare la pianificazione", str(exc))
+
+    def _selected_schedule_id(self):
+        row = self.schedules_table.currentRow()
+        if row < 0:
+            return None
+        item = self.schedules_table.item(row, 0)
+        return item.data(Qt.ItemDataRole.UserRole) if item else None
+
+    def toggle_selected_schedule(self):
+        schedule_id = self._selected_schedule_id()
+        if schedule_id is None:
+            QMessageBox.information(self, "Selezione richiesta",
+                                    "Seleziona una pianificazione dalla tabella.")
+            return
+        try:
+            current = self.database_service.get_schedule(schedule_id)
+            if current is None:
+                self.load_schedules()
+                return
+            updated = self.database_service.set_schedule_enabled(
+                schedule_id, not current["enabled"]
+            )
+            self.load_schedules()
+            state = "attivata" if updated["enabled"] else "disattivata"
+            self.schedule_status_label.setText(
+                f"Pianificazione #{schedule_id} {state}."
+            )
+            if self.scheduled_scan_manager is not None and updated["enabled"]:
+                self.scheduled_scan_manager.resume()
+        except Exception as exc:
+            QMessageBox.warning(self, "Errore aggiornamento", str(exc))
+
+    def delete_selected_schedule(self):
+        schedule_id = self._selected_schedule_id()
+        if schedule_id is None:
+            QMessageBox.information(self, "Selezione richiesta",
+                                    "Seleziona una pianificazione dalla tabella.")
+            return
+        answer = QMessageBox.question(
+            self, "Conferma eliminazione",
+            f"Vuoi eliminare definitivamente la pianificazione #{schedule_id}?"
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.database_service.delete_schedule(schedule_id)
+            self.load_schedules()
+            self.schedule_status_label.setText(
+                f"Pianificazione #{schedule_id} eliminata."
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Errore eliminazione", str(exc))
+
+    def load_schedules(self):
+        if not hasattr(self, "schedules_table") or self.database_service is None:
+            return
+        try:
+            schedules = self.database_service.get_schedules(include_disabled=True)
+            self.schedules_table.setRowCount(len(schedules))
+            for row, schedule in enumerate(schedules):
+                next_run = schedule.get("next_run_at") or "—"
+                last_run = schedule.get("last_run_at") or "Mai"
+                values = [
+                    str(schedule["id"]),
+                    schedule.get("name") or "—",
+                    schedule["domain"],
+                    self._format_schedule_interval(schedule["interval_minutes"]),
+                    "ATTIVA" if schedule["enabled"] else "IN PAUSA",
+                    next_run.replace("T", " ")[:19],
+                    last_run.replace("T", " ")[:19],
+                    str(schedule.get("run_count", 0)),
+                    str(schedule.get("failure_count", 0)),
+                ]
+                for column, value in enumerate(values):
+                    cell = QTableWidgetItem(str(value))
+                    if column == 0:
+                        cell.setData(Qt.ItemDataRole.UserRole, schedule["id"])
+                    self.schedules_table.setItem(row, column, cell)
+            self.schedule_status_label.setText(
+                f"{len(schedules)} pianificazioni registrate. "
+                "Gli orari sono mostrati in UTC."
+            )
+        except Exception as exc:
+            self.schedule_status_label.setText(
+                f"Errore caricamento pianificazioni: {exc}"
+            )
+
+    def on_scheduled_status_changed(self, message):
+        if hasattr(self, "schedule_status_label"):
+            self.schedule_status_label.setText(str(message))
+
+    def on_scheduled_event(self, payload):
+        self.load_schedules()
+        self.load_history()
+        domain = payload.get("domain", "dominio")
+        if payload.get("error"):
+            self.schedule_status_label.setText(
+                f"Scansione pianificata per {domain} con errore: {payload['error']}"
+            )
+        else:
+            self.schedule_status_label.setText(
+                f"Scansione pianificata completata per {domain}."
+            )
 
     def load_history(self):
         if self.database_service is None:
@@ -1205,3 +1920,31 @@ class MainWindow(QMainWindow):
                 "Errore",
                 f"Impossibile caricare i dettagli:\n{exc}",
             )
+
+
+    def closeEvent(self, event):
+        """Rimanda la chiusura finché i worker GUI non hanno terminato."""
+        active_threads = [
+            thread for thread in (self.scan_thread, self.screenshot_thread)
+            if thread is not None and thread.isRunning()
+        ]
+        if active_threads:
+            self._close_requested = True
+            self.setEnabled(False)
+            self.status_label.setText(
+                "Attendo il completamento delle operazioni in corso prima di chiudere..."
+            )
+            event.ignore()
+            return
+        event.accept()
+
+    def _complete_deferred_close(self):
+        if not self._close_requested:
+            return
+        active = any(
+            thread is not None and thread.isRunning()
+            for thread in (self.scan_thread, self.screenshot_thread)
+        )
+        if not active:
+            self._close_requested = False
+            self.close()

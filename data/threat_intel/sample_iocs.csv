@@ -1,3 +1,2 @@
 indicator,type,source,confidence,first_seen,last_seen,description
-bad-example.test,domain,Local-Test-Feed,95,2026-01-10,2026-02-10,Indicatore simulato per test
-suspicious-example.test,domain,Local-Test-Feed,70,2026-02-01,2026-02-10,Secondo indicatore simulato
+example-malicious.test,domain,local_demo_feed,95,,,IOC fittizio per test locale; dominio riservato .test

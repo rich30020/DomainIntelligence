@@ -1,7 +1,7 @@
-
 import sys
 from pathlib import Path
 
+from app_paths import resource_path
 from PySide6.QtWidgets import QApplication
 
 from gui.main_window import MainWindow
@@ -20,6 +20,7 @@ from modules import (
 
 from services import DatabaseService
 from services.threat_intel_store import ThreatIntelStore
+from services.scheduled_scan_manager import ScheduledScanManager
 
 
 def create_scanner_engine(threat_intel_store):
@@ -29,11 +30,9 @@ def create_scanner_engine(threat_intel_store):
     engine.register_module(SubdomainFinder())
     engine.register_module(SimilarDomainAnalyzer())
     engine.register_module(WebsiteCloneAnalyzer())
-
     engine.register_module(
         ThreatIntelAnalyzer(store=threat_intel_store)
     )
-
     engine.register_module(ImageHashAnalyzer())
     engine.register_module(ImageSimilarityAnalyzer())
     engine.register_module(LogoDetector())
@@ -46,39 +45,38 @@ def main():
     app.setApplicationName("Domain Intelligence")
 
     threat_intel_store = ThreatIntelStore()
-
-    feed_path = (
-        Path(__file__).resolve().parent
-        / "data"
-        / "threat_intel"
-        / "sample_iocs.csv"
-    )
+    feed_path = resource_path(Path("data") / "threat_intel" / "sample_iocs.csv")
 
     if feed_path.exists():
-        import_result = threat_intel_store.import_csv(
-            str(feed_path)
-        )
+        import_result = threat_intel_store.import_csv(str(feed_path))
         print("Threat Intelligence:", import_result)
     else:
         print("Feed IOC non trovato:", feed_path)
 
-    scanner_engine = create_scanner_engine(
-        threat_intel_store
-    )
-
+    scanner_engine = create_scanner_engine(threat_intel_store)
     database_service = DatabaseService()
+
+    scheduled_scan_manager = ScheduledScanManager(
+        scanner_engine=scanner_engine,
+        database_service=database_service,
+        check_interval_ms=15000,
+    )
 
     window = MainWindow(
         scanner_engine=scanner_engine,
         database_service=database_service,
+        scheduled_scan_manager=scheduled_scan_manager,
     )
 
+    # Alla chiusura completa della finestra l'app termina: il manager ferma
+    # il timer e attende l'eventuale scansione attiva prima di chiudere SQLite.
+    app.aboutToQuit.connect(scheduled_scan_manager.shutdown)
+    app.aboutToQuit.connect(database_service.close)
+
+    scheduled_scan_manager.start()
     window.show()
 
-    exit_code = app.exec()
-
-    database_service.close()
-    sys.exit(exit_code)
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

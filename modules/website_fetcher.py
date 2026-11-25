@@ -1,7 +1,26 @@
+import http.client
 import ipaddress
 import socket
+import ssl
+from urllib.parse import urlsplit
 
-import httpx
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPSConnection che connette all'IP validato mantenendo SNI e verifica TLS sul dominio."""
+
+    def __init__(self, hostname, address, timeout):
+        super().__init__(hostname, port=443, timeout=timeout, context=ssl.create_default_context())
+        self._pinned_address = address
+
+    def connect(self):
+        raw_socket = socket.create_connection(
+            (self._pinned_address, self.port),
+            self.timeout,
+        )
+        self.sock = self._context.wrap_socket(
+            raw_socket,
+            server_hostname=self.host,
+        )
 
 
 class WebsiteFetcher:
@@ -23,89 +42,94 @@ class WebsiteFetcher:
                 f"Impossibile risolvere il dominio: {exc}"
             ) from exc
 
-        addresses = sorted({
-            item[4][0]
-            for item in answers
-        })
-
+        addresses = sorted({item[4][0] for item in answers})
         if not addresses:
             raise ValueError("Il dominio non ha indirizzi IP.")
 
         for address in addresses:
-            ip = ipaddress.ip_address(address)
-
+            ip = ipaddress.ip_address(address.split("%", 1)[0])
             if not ip.is_global:
                 raise ValueError(
                     f"Indirizzo IP non pubblico rifiutato: {address}"
                 )
-
         return addresses
 
     def fetch(self, domain: str) -> dict:
         domain = domain.strip().lower().rstrip(".")
-
         try:
             domain = domain.encode("idna").decode("ascii")
         except UnicodeError as exc:
             raise ValueError("Nome dominio non valido.") from exc
 
-        if not domain or "/" in domain or ":" in domain:
-            raise ValueError("Inserire un nome dominio, non un URL.")
+        if (
+            not domain
+            or "/" in domain
+            or ":" in domain
+            or "@" in domain
+            or any(ch.isspace() for ch in domain)
+        ):
+            raise ValueError("Inserire un nome dominio valido, non un URL.")
 
-        # Verifica preventiva degli indirizzi DNS.
+        # Il socket si connette direttamente a uno degli IP già validati:
+        # non viene effettuata una seconda risoluzione DNS durante la connessione.
         addresses = self.validate_public_dns(domain)
+        last_error = None
 
-        url = f"https://{domain}/"
+        for address in addresses:
+            connection = _PinnedHTTPSConnection(domain, address, self.timeout)
+            try:
+                connection.request(
+                    "GET",
+                    "/",
+                    headers={
+                        "Host": domain,
+                        "User-Agent": "DomainIntelligence/1.0",
+                        "Accept": "text/html",
+                        "Connection": "close",
+                    },
+                )
+                response = connection.getresponse()
 
-        with httpx.Client(
-            timeout=self.timeout,
-            follow_redirects=False,
-            trust_env=False,
-            headers={
-                "User-Agent": "DomainIntelligence/1.0",
-                "Accept": "text/html",
-            },
-        ) as client:
-            with client.stream("GET", url) as response:
-                if response.is_redirect:
+                if response.status in (301, 302, 303, 307, 308):
                     raise ValueError(
                         "Redirect non seguito per motivi di sicurezza."
                     )
+                if response.status < 200 or response.status >= 300:
+                    raise ValueError(f"Risposta HTTP non valida: {response.status}")
 
-                response.raise_for_status()
-
-                content_type = response.headers.get(
-                    "content-type", ""
-                ).lower()
-
+                content_type = response.getheader("Content-Type", "").lower()
                 if "text/html" not in content_type:
-                    raise ValueError(
-                        "La risorsa non è una pagina HTML."
-                    )
+                    raise ValueError("La risorsa non è una pagina HTML.")
 
-                chunks = []
-                total_bytes = 0
+                content_length = response.getheader("Content-Length")
+                if content_length:
+                    try:
+                        if int(content_length) > self.MAX_HTML_BYTES:
+                            raise ValueError("La pagina supera il limite di 1 MB.")
+                    except ValueError as exc:
+                        if "supera il limite" in str(exc):
+                            raise
+                        # Content-Length malformato: si applica comunque il limite streaming.
 
-                for chunk in response.iter_bytes():
-                    total_bytes += len(chunk)
+                body = response.read(self.MAX_HTML_BYTES + 1)
+                if len(body) > self.MAX_HTML_BYTES:
+                    raise ValueError("La pagina supera il limite di 1 MB.")
 
-                    if total_bytes > self.MAX_HTML_BYTES:
-                        raise ValueError(
-                            "La pagina supera il limite di 1 MB."
-                        )
-
-                    chunks.append(chunk)
-
-                html = b"".join(chunks).decode(
-                    response.encoding or "utf-8",
-                    errors="replace",
-                )
-
+                html = body.decode("utf-8", errors="replace")
                 return {
                     "domain": domain,
-                    "url": url,
-                    "status_code": response.status_code,
+                    "url": f"https://{domain}/",
+                    "status_code": response.status,
                     "content_type": content_type,
                     "html": html,
                     "resolved_ips": addresses,
+                    "connected_ip": address,
                 }
+            except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
+                last_error = exc
+            finally:
+                connection.close()
+
+        raise ValueError(
+            f"Impossibile collegarsi agli IP pubblici verificati per {domain}: {last_error}"
+        ) from last_error

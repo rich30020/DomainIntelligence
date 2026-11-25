@@ -165,3 +165,56 @@ class FindingRecord(Base):
     scan: Mapped["ScanRecord"] = relationship(
         back_populates="findings",
     )
+
+class ScheduledScanRecord(Base):
+    """Configurazione persistente di una scansione periodica."""
+
+    __tablename__ = "scheduled_scan_records"
+
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    domain: Mapped[str] = mapped_column(String(253), index=True, nullable=False)
+    selected_modules: Mapped[list] = mapped_column(JSON, nullable=False)
+    interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    next_run_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), index=True, nullable=False
+    )
+    last_run_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_scan_id: Mapped[str | None] = mapped_column(
+        String(100), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    run_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failure_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class ScreenshotRecord(Base):
+    """Metadati persistenti di uno screenshot acquisito con autorizzazione."""
+
+    __tablename__ = "screenshot_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    domain: Mapped[str] = mapped_column(String(253), index=True, nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    screenshot_path: Mapped[str] = mapped_column(Text, nullable=False)
+    page_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    page_width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    page_height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    comparison_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    similarity_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    assessment: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
+    phash_distance: Mapped[int | None] = mapped_column(Integer, nullable=True)
