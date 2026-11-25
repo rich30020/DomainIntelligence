@@ -1,3 +1,9 @@
+"""test database manual.
+
+This file contains test helpers or manual checks for the Domain Intelligence
+application. It is kept separate from the production application startup.
+"""
+
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
@@ -5,10 +11,10 @@ from uuid import uuid4
 from services.database_service import DatabaseService
 
 
-# Identificativo univoco per questa prova
+# Unique identifier for this test run
 scan_id = str(uuid4())
 
-# Risultato simulato del Subdomain Finder
+# Simulated Subdomain Finder output
 subdomain_result = SimpleNamespace(
     module_name="subdomain_finder",
     success=True,
@@ -26,7 +32,7 @@ subdomain_result = SimpleNamespace(
     },
 )
 
-# Risultato simulato del Threat Intelligence Analyzer
+# Simulated Threat Intelligence Analyzer output
 threat_result = SimpleNamespace(
     module_name="threat_intel_analyzer",
     success=True,
@@ -50,7 +56,7 @@ threat_result = SimpleNamespace(
     },
 )
 
-# Risultato complessivo della scansione simulata
+# Combined result for the simulated scan
 scan = SimpleNamespace(
     scan_id=scan_id,
     domain="example.test",
@@ -63,21 +69,21 @@ scan = SimpleNamespace(
     ],
 )
 
-# Apertura del database
+# Open the database
 database = DatabaseService()
 
-# Salvataggio
+# Save the simulated scan
 saved = database.save_scan_result(scan)
 
 print("\nSALVATAGGIO")
 print(saved)
 
-# Lettura cronologia
+# Read scan history
 print("\nCRONOLOGIA")
 for item in database.get_scan_history():
     print(item)
 
-# Lettura dettagli
+# Read scan details
 print("\nDETTAGLI SCANSIONE")
 details = database.get_scan_details(scan_id)
 

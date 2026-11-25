@@ -1,3 +1,5 @@
+"""Build a conservative, explainable risk indicator from threat-intelligence matches."""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
@@ -16,15 +18,12 @@ class RiskEvidence:
 
 
 class RiskScoringService:
-    """
-    Conservative, explainable IOC-based risk indicator.
+    """Convert IOC matches into a traceable score without overstating certainty.
 
-    Important:
-    - No IOC match means "not evaluable", not "safe".
-    - Similarity, registration, DNS presence, TLS validity, and source errors
-      are not treated as proof of malicious activity.
-    - The score is an indicator derived from IOC feed confidence, not a
-      probability that a domain is malicious.
+    Only evidence returned by the Threat Intelligence module contributes to
+    the score. A missing match is reported as not evaluable, not as evidence
+    that a domain is benign. Similarity and infrastructure observations are
+    deliberately excluded from this calculation.
     """
 
     LEVELS = (
@@ -38,27 +37,33 @@ class RiskScoringService:
 
     @staticmethod
     def _get(value: Any, key: str, default=None):
+        """Read a field from either a dictionary or an object."""
         if isinstance(value, dict):
             return value.get(key, default)
         return getattr(value, key, default)
 
     @classmethod
     def _module_results(cls, scan_result: Any) -> Iterable[Any]:
+        """Return module results from either supported scan-result format."""
         if isinstance(scan_result, dict):
             return scan_result.get("results", []) or []
         return cls._get(scan_result, "results", []) or []
 
     @staticmethod
     def _level(score: int) -> str:
+        """Map a numeric indicator to the configured qualitative band."""
         for threshold, label in RiskScoringService.LEVELS:
             if score >= threshold:
                 return label
         return "non_valutabile"
 
     def calculate(self, scan_result: Any) -> dict:
-        """
-        Accepts a ScannerEngine ScanResult (or a compatible dictionary)
-        and returns a structured, explainable risk assessment.
+        """Return a structured assessment from a ScanResult or compatible mapping.
+
+        Evidence is normalized, deduplicated by domain/indicator/type/source,
+        and sorted by confidence. The highest source confidence forms the base
+        score; each additional distinct source adds a bounded corroboration
+        bonus. The returned method metadata explains this calculation.
         """
         scan_domain = (
             scan_result.get("domain", "")
@@ -131,7 +136,8 @@ class RiskScoringService:
                         )
                     )
 
-        # Deduplicate repeated rows from the same source/feed.
+        # Collapse duplicate feed rows while retaining the strongest confidence
+        # for each domain/indicator/type/source combination.
         unique: dict[tuple[str, str, str, str], RiskEvidence] = {}
         for item in evidence:
             key = (
@@ -186,6 +192,8 @@ class RiskScoringService:
                 },
             }
 
+        # Independent sources provide limited corroboration. The cap prevents
+        # the score from exceeding the documented 0–100 confidence scale.
         max_confidence = max(item.confidence for item in evidence)
         sources = {item.source.lower() for item in evidence}
         source_bonus = self.ADDITIONAL_SOURCE_BONUS * max(0, len(sources) - 1)
@@ -221,5 +229,5 @@ class RiskScoringService:
         }
 
     def run(self, scan_result: Any) -> dict:
-        """Alias convenient for callers that prefer a run() method."""
+        """Expose ``calculate`` through the module-style ``run`` interface."""
         return self.calculate(scan_result)

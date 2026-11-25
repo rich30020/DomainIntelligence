@@ -1,12 +1,12 @@
 
+"""Resolve discovered hostnames to confirm which DNS names currently answer."""
+
 import dns.resolver
 import dns.exception
 
 
 class SubdomainVerifier:
-    """
-    Verifica la risoluzione DNS dei sottodomini.
-    """
+    """Verify DNS resolution using bounded queries and supported record types."""
 
     def __init__(self, timeout: float = 3.0):
 
@@ -16,6 +16,7 @@ class SubdomainVerifier:
         self.resolver.lifetime = timeout
 
     def verify(self, hostname: str) -> dict:
+        """Return resolution status and observed records for one hostname."""
 
         addresses = []
 

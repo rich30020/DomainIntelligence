@@ -1,12 +1,12 @@
 
+"""Query selected public DNS record types and normalize resolver responses."""
+
 import dns.resolver
 import dns.exception
 
 
 class DNSAnalyzer:
-    """
-    Analizza i record DNS pubblici di un dominio.
-    """
+    """Analyze public DNS records for a domain using bounded resolver timeouts."""
 
     RECORD_TYPES = [
         "A",
@@ -27,6 +27,7 @@ class DNSAnalyzer:
         self.resolver.lifetime = timeout
 
     def get_record(self, domain: str, record_type: str):
+        """Query one DNS record type and return normalized answers or an error."""
 
         try:
 
@@ -54,6 +55,7 @@ class DNSAnalyzer:
             return []
 
     def analyze(self, domain: str) -> dict:
+        """Collect the configured record types into one structured DNS report."""
 
         results = {}
 

@@ -1,12 +1,12 @@
-"""Screenshot sicuri di siti esplicitamente autorizzati.
+"""Safely capture screenshots of explicitly authorized websites.
 
-Richiede Playwright e Chromium:
+Requires Playwright and Chromium::
     pip install playwright
     python -m playwright install chromium
 
-Il servizio applica una allowlist esatta di hostname, accetta solo HTTPS,
-blocca IP non pubblici e ripete i controlli per ogni richiesta/redirect.
-Non invia credenziali, non compila form e non interagisce con la pagina.
+The service enforces an exact hostname allowlist, accepts HTTPS only, blocks
+non-public IP addresses, and checks every browser request. It does not submit
+credentials, fill forms, or interact with page controls.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ import re
 
 
 class ScreenshotSecurityError(ValueError):
-    """Richiesta di acquisizione non consentita."""
+    """Raised when a screenshot request violates the capture policy."""
 
 
 @dataclass
@@ -40,7 +40,7 @@ def _normalise_host(host: str) -> str:
 
 
 def _resolve_public_host(hostname: str) -> list[str]:
-    """Restituisce IP pubblici verificati; rifiuta risposte miste o non pubbliche."""
+    """Return verified public IPs; reject mixed or non-public DNS answers."""
     try:
         records = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
     except socket.gaierror as exc:
@@ -58,20 +58,20 @@ def _resolve_public_host(hostname: str) -> list[str]:
 
 
 def _build_host_resolver_rules(hosts: set[str]) -> str:
-    """Crea regole Chromium che fissano gli host autorizzati agli IP verificati."""
+    """Build Chromium resolver rules that pin approved hosts to validated IPs."""
     rules = []
     for raw_host in sorted(hosts):
         host = _normalise_host(raw_host)
         addresses = _resolve_public_host(host)
-        # Una singola destinazione validata evita che Chromium ripeta una
-        # risoluzione DNS indipendente dopo il controllo applicativo.
+        # Pinning one validated destination prevents Chromium from performing an
+        # independent DNS lookup after the application-level validation.
         rules.append(f"MAP {host} {addresses[0]}")
     rules.append("EXCLUDE localhost")
     return ",".join(rules)
 
 
 def validate_capture_url(url: str, authorised_hosts: set[str]) -> str:
-    """Valida URL HTTPS e hostname esattamente presente nella allowlist."""
+    """Validate an HTTPS URL whose hostname exactly matches the allowlist."""
     if not isinstance(url, str) or not url.strip():
         raise ScreenshotSecurityError("Inserisci un URL valido.")
     parsed = urlsplit(url.strip())
@@ -101,7 +101,7 @@ def capture_authorised_site(
     timeout_ms: int = 20000,
     viewport: tuple[int, int] = (1440, 1000),
 ) -> ScreenshotResult:
-    """Acquisisce una schermata completa senza interazioni con il sito."""
+    """Capture a full-page screenshot without interacting with the website."""
     hostname = validate_capture_url(url, authorised_hosts)
 
     try:
@@ -159,7 +159,8 @@ def capture_authorised_site(
         page.route("**/*", guard_request)
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-            # Brief bounded wait for layout/fonts; do not wait indefinitely for analytics.
+            # Allow a short, bounded layout/font settling period without waiting
+            # indefinitely for analytics or other long-running page requests.
             page.wait_for_timeout(800)
             title = page.title()[:500]
             description = page.locator('meta[name="description"]').get_attribute("content") or ""

@@ -1,12 +1,17 @@
 
+"""Thread-safe in-process event subscription and dispatch."""
+
 from collections import defaultdict
 from threading import RLock
 from typing import Callable, Any
 
 
 class EventManager:
-    """
-    Gestisce gli eventi interni di Domain Intelligence.
+    """Publish named events to registered callbacks.
+
+    The listener list is copied under the lock, then callbacks run outside it.
+    This prevents application code from holding internal synchronization and
+    allows one failing listener to be isolated from the remaining listeners.
     """
 
     def __init__(self):
@@ -18,7 +23,7 @@ class EventManager:
         event_name: str,
         callback: Callable
     ):
-        """Registra una funzione per un determinato evento."""
+        """Register ``callback`` once for the given event name."""
 
         with self._lock:
             if callback not in self._listeners[event_name]:
@@ -29,7 +34,7 @@ class EventManager:
         event_name: str,
         callback: Callable
     ):
-        """Rimuove una funzione dagli ascoltatori."""
+        """Remove ``callback`` from the named event, if registered."""
 
         with self._lock:
             if callback in self._listeners[event_name]:
@@ -40,22 +45,24 @@ class EventManager:
         event_name: str,
         data: Any = None
     ):
-        """Invia un evento a tutti gli ascoltatori."""
+        """Dispatch event data to a snapshot of the current listeners."""
 
         with self._lock:
             listeners = list(
                 self._listeners[event_name]
             )
 
+        # Invoke callbacks outside the lock; listeners may subscribe or
+        # unsubscribe while an event is being handled.
         for callback in listeners:
             try:
                 callback(data)
             except Exception:
-                # Un listener non deve bloccare gli altri.
+                # Listener failures are isolated so delivery can continue.
                 continue
 
     def clear(self):
-        """Rimuove tutti gli ascoltatori."""
+        """Remove every registered listener from the event registry."""
 
         with self._lock:
             self._listeners.clear()

@@ -1,4 +1,6 @@
 
+"""Calculate perceptual fingerprints for local image files."""
+
 from pathlib import Path
 
 from PIL import Image
@@ -6,11 +8,17 @@ import imagehash
 
 
 class ImageHashAnalyzer:
+    """Generate perceptual hashes that tolerate small visual transformations.
+
+    These are compact visual fingerprints, not cryptographic integrity hashes;
+    they indicate visual resemblance rather than byte-for-byte identity.
+    """
     name = "image_hash_analyzer"
     requires_active = False
 
     @staticmethod
     def analyze(image_path: str) -> dict:
+        """Open an image and return its pHash, aHash, and dHash values."""
         path = Path(image_path)
 
         if not path.exists():
@@ -40,6 +48,7 @@ class ImageHashAnalyzer:
 
     @staticmethod
     def compare_hashes(first: str, second: str) -> dict:
+        """Compare two perceptual hashes using Hamming distance and similarity."""
         hash_a = imagehash.hex_to_hash(first)
         hash_b = imagehash.hex_to_hash(second)
 
@@ -56,6 +65,7 @@ class ImageHashAnalyzer:
         }
 
     def run(self, context, cancellation_event):
+        """Read the image path from scan metadata and return image fingerprints."""
         if cancellation_event.is_set():
             return {"cancelled": True}
 

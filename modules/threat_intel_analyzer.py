@@ -1,8 +1,16 @@
+"""Correlate scanned domain names with locally imported IOC records."""
+
 from core.scope_manager import ScanMode
 from services.threat_intel_store import ThreatIntelStore
 
 
 class ThreatIntelAnalyzer:
+    """Match the root domain and discovered subdomains against the local IOC store.
+
+    This module performs local comparisons only: it does not visit domains or
+    make network requests. Matches retain source and confidence provenance for
+    later review and risk-indicator calculation.
+    """
 
     name = "threat_intel_analyzer"
     requires_active = False
@@ -12,6 +20,7 @@ class ThreatIntelAnalyzer:
 
     @staticmethod
     def classify_score(score: int) -> str:
+        """Map the module confidence score to its configured qualitative label."""
         if score >= 85:
             return "critical"
         if score >= 70:
@@ -23,6 +32,7 @@ class ThreatIntelAnalyzer:
         return "no_match"
 
     def analyze_domain(self, domain: str) -> dict:
+        """Return local IOC matches for one normalized domain name."""
         normalized = self.store.normalize_domain(domain)
 
         if not normalized:
@@ -70,13 +80,14 @@ class ThreatIntelAnalyzer:
         }
 
     def run(self, context, cancellation_event):
+        """Analyze the root domain and discovered subdomains against local IOCs."""
         if cancellation_event.is_set():
             return {"cancelled": True, "results": []}
 
         results = []
 
-        # Il modulo effettua soltanto correlazioni locali.
-        # Non visita domini e non esegue richieste di rete.
+        # This module performs local correlation only. It does not visit target
+        # websites, resolve candidate hosts, or issue network requests.
         domains = [context.domain]
 
         metadata = getattr(context, "metadata", {}) or {}

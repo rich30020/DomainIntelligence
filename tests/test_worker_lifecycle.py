@@ -1,3 +1,9 @@
+"""test worker lifecycle.
+
+This file contains test helpers or manual checks for the Domain Intelligence
+application. It is kept separate from the production application startup.
+"""
+
 from threading import Event
 
 from gui.scan_worker import ScanWorker
@@ -17,6 +23,9 @@ class FakeEngine:
 
 
 def test_worker_emits_result_and_finished():
+    """Verify expected behavior for worker emits result and finished.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     result = object()
     engine = FakeEngine(result=result)
     worker = ScanWorker(engine, "example.com", ["domain_scanner"])
@@ -30,6 +39,9 @@ def test_worker_emits_result_and_finished():
 
 
 def test_worker_emits_readable_error_and_finished():
+    """Verify expected behavior for worker emits readable error and finished.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     engine = FakeEngine(error=ValueError("errore simulato"))
     worker = ScanWorker(engine, "example.com", ["domain_scanner"])
     failed, finished = [], []
@@ -42,6 +54,9 @@ def test_worker_emits_readable_error_and_finished():
 
 
 def test_worker_respects_pre_cancelled_event():
+    """Verify expected behavior for worker respects pre cancelled event.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     event = Event()
     event.set()
     engine = FakeEngine(result=object())

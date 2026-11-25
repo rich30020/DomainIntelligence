@@ -1,4 +1,6 @@
 
+"""Typed representation of a domain and its collected public metadata."""
+
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -6,6 +8,11 @@ from typing import Any
 
 @dataclass
 class Domain:
+    """Hold a domain identity and optional RDAP, DNS, and certificate metadata.
+
+    Each enrichment field is separate because the sources have different
+    schemas and individual lookups can fail independently.
+    """
 
     name: str
     normalized_name: str

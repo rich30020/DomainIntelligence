@@ -21,3 +21,7 @@ Attivare l'ambiente virtuale:
 Avviare l'applicazione:
 
 python main.py
+
+## Developer documentation
+
+See [docs/CODE_ARCHITECTURE.md](docs/CODE_ARCHITECTURE.md) for the execution flow, module responsibilities, scope and authorization checks, threading model, persistence layer, and the intended interpretation of similarity and IOC-based risk indicators.

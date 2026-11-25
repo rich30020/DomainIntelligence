@@ -1,11 +1,11 @@
 
+"""Query HackerTarget public hostsearch observations for a domain."""
+
 import httpx
 
 
 class HackerTargetSource:
-    """
-    Recupera hostname da HackerTarget Hostsearch.
-    """
+    """Retrieve hostname observations from the public HackerTarget Hostsearch API."""
 
     name = "hackertarget"
 
@@ -15,6 +15,7 @@ class HackerTargetSource:
         self.timeout = timeout
 
     def search(self, domain: str) -> dict:
+        """Fetch and normalize public hostsearch results for one domain."""
 
         try:
 

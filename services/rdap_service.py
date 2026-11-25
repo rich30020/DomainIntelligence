@@ -1,11 +1,11 @@
 
+"""Retrieve public registration metadata through the RDAP protocol."""
+
 import httpx
 
 
 class RDAPService:
-    """
-    Recupera informazioni pubbliche RDAP.
-    """
+    """Fetch public domain registration data without attempting account access."""
 
     BASE_URL = "https://rdap.org/domain/"
 
@@ -13,6 +13,12 @@ class RDAPService:
         self.timeout = timeout
 
     def get_domain_info(self, domain: str) -> dict:
+        """Query the RDAP bootstrap service and normalize common response fields.
+
+        Network, timeout, and not-found conditions are returned as structured
+        statuses so callers can distinguish unavailable data from a positive
+        registration lookup.
+        """
 
         url = f"{self.BASE_URL}{domain}"
 
@@ -40,6 +46,8 @@ class RDAPService:
 
                 data = response.json()
 
+                # Registrar information is represented by an entity whose
+                # RDAP role includes 'registrar'; retain its vCard payload.
                 registrar = None
 
                 for entity in data.get("entities", []):

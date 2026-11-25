@@ -1,6 +1,8 @@
 from core.event_manager import EventManager
 from core.scope_manager import ScanMode, ScanScope, ScopeManager
 from core.task_manager import TaskManager
+"""Public API for scan orchestration and scope management."""
+
 from core.scanner_engine import (
     ScannerEngine,
     ScanRequest,

@@ -1,4 +1,4 @@
-"""Confronto visuale tra screenshot locali di riferimento."""
+"""Compare local reference screenshots using perceptual image fingerprints."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,6 +7,7 @@ from pathlib import Path
 
 @dataclass
 class VisualComparison:
+    """Store screenshot similarity metrics and the required interpretation caveat."""
     reference_path: str
     candidate_path: str
     similarity_percent: float
@@ -19,9 +20,16 @@ class VisualComparison:
 
 
 class ScreenshotVisualAnalyzer:
+    """Compare two local screenshots without contacting either website.
+
+    The output contains a perceptual-hash distance and a percentage-like
+    similarity value. These metrics can guide review but cannot prove cloning,
+    phishing, or fraudulent intent.
+    """
     name = "screenshot_visual_analyzer"
 
     def compare(self, reference_path: str | Path, candidate_path: str | Path) -> VisualComparison:
+        """Load both images and return their visual similarity assessment."""
         reference = Path(reference_path)
         candidate = Path(candidate_path)
         if not reference.is_file() or not candidate.is_file():

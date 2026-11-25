@@ -1,3 +1,9 @@
+"""Automated tests for test core.
+
+These tests protect the documented behavior of the Domain Intelligence application
+and help detect regressions when implementation details are changed.
+"""
+
 
 from core import (
     ScannerEngine,
@@ -22,6 +28,9 @@ class TestModule:
 
 
 def test_scanner_engine():
+    """Verify expected behavior for scanner engine.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
 
     engine = ScannerEngine()
 
@@ -45,6 +54,9 @@ def test_scanner_engine():
 
 
 def test_invalid_domain():
+    """Verify expected behavior for invalid domain.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
 
     engine = ScannerEngine()
 
@@ -64,6 +76,9 @@ def test_invalid_domain():
 
 
 def test_task_manager():
+    """Verify expected behavior for task manager.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
 
     manager = TaskManager(max_workers=2)
 

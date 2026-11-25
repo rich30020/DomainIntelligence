@@ -1,3 +1,5 @@
+"""Import, validate, normalize, and deduplicate local IOC feed records."""
+
 import csv
 import ipaddress
 
@@ -7,6 +9,11 @@ from models.ioc import IOC
 
 
 class ThreatIntelStore:
+    """Hold validated IOC records loaded from local CSV feeds.
+
+    This service performs no network lookups. Feed provenance is preserved on
+    each IOC so later matching and risk scoring can identify independent sources.
+    """
 
     REQUIRED_COLUMNS = {
         "indicator",
@@ -20,6 +27,7 @@ class ThreatIntelStore:
 
     @staticmethod
     def normalize_domain(domain: str) -> str | None:
+        """Normalize a hostname to lowercase IDNA ASCII or return ``None``."""
         if not isinstance(domain, str):
             return None
 
@@ -60,6 +68,7 @@ class ThreatIntelStore:
 
     @staticmethod
     def validate_indicator(indicator: str, indicator_type: str):
+        """Validate and normalize a domain, IP, hash, or HTTP(S) URL IOC."""
         if indicator_type == "domain":
             normalized = ThreatIntelStore.normalize_domain(
                 indicator
@@ -100,6 +109,12 @@ class ThreatIntelStore:
         raise ValueError("Tipo IOC non supportato.")
 
     def import_csv(self, csv_path: str) -> dict:
+        """Import valid CSV rows and report rejected rows without aborting the feed.
+
+        Required columns are checked before parsing. Individual row errors are
+        collected with line numbers so one malformed indicator does not prevent
+        other valid records from being loaded.
+        """
         path = Path(csv_path)
 
         if not path.exists():
@@ -146,6 +161,8 @@ class ThreatIntelStore:
                         description=row.get("description") or None,
                     )
 
+                    # The same indicator may legitimately appear in multiple
+                    # feeds; deduplicate only when type and source also match.
                     key = (
                         ioc.indicator,
                         ioc.indicator_type,
@@ -180,6 +197,7 @@ class ThreatIntelStore:
         }
 
     def get_domain_indicators(self) -> list[IOC]:
+        """Return only domain-type indicators for domain/subdomain matching."""
         return [
             item
             for item in self.indicators

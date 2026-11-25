@@ -1,4 +1,6 @@
 
+"""Collect public domain registration, DNS, and authorized TLS metadata."""
+
 import re
 
 from core.scope_manager import ScanMode
@@ -10,11 +12,16 @@ from modules.certificate_analyzer import CertificateAnalyzer
 
 
 class DomainScanner:
+    """Orchestrate domain validation and independent RDAP, DNS, and TLS checks.
+
+    RDAP and DNS use publicly available information. The direct TLS check is
+    gated by the authorization scope so it is not treated as a passive lookup.
+    """
 
     name = "domain_scanner"
 
-    # Il modulo esegue DNS e RDAP pubblici.
-    # TLS diretto viene verificato separatamente.
+    # DNS and RDAP are public-data lookups. Direct TLS inspection is a separate
+    # operation because the scanner requires explicit authorization for it.
     requires_active = False
 
     def __init__(self):
@@ -25,14 +32,16 @@ class DomainScanner:
 
     @staticmethod
     def normalize_domain(domain: str) -> str:
+        """Normalize a hostname, including Unicode labels, to IDNA ASCII."""
 
         domain = domain.strip().rstrip(".").lower()
 
-        # Converte i domini Unicode in formato IDNA.
+        # Convert Unicode domain labels to their ASCII-compatible IDNA form.
         return domain.encode("idna").decode("ascii")
 
     @staticmethod
     def validate_domain(domain: str) -> bool:
+        """Return whether the normalized input is a syntactically valid domain."""
 
         if not domain or len(domain) > 253:
             return False
@@ -47,6 +56,7 @@ class DomainScanner:
         return bool(re.fullmatch(pattern, domain))
 
     def run(self, context, cancellation_event):
+        """Collect domain metadata and return it in the module result schema."""
 
         original_domain = context.domain
 
@@ -77,7 +87,7 @@ class DomainScanner:
             }
         }
 
-        # 1. RDAP
+        # 1. Retrieve public registration metadata from RDAP.
 
         if cancellation_event.is_set():
             return results
@@ -96,7 +106,7 @@ class DomainScanner:
                 "message": str(exc)
             }
 
-        # 2. DNS
+        # 2. Collect public DNS records.
 
         if cancellation_event.is_set():
             return results
@@ -115,7 +125,7 @@ class DomainScanner:
                 "message": str(exc)
             }
 
-        # 3. TLS diretto, solo con autorizzazione.
+        # 3. Inspect TLS only when the declared scope authorizes active checks.
 
         if cancellation_event.is_set():
             return results
@@ -143,7 +153,7 @@ class DomainScanner:
                 )
             }
 
-        # 4. Costruzione del modello.
+        # 4. Complete the normalized domain model.
 
         domain_model.rdap_info = results["rdap"]
         domain_model.dns_info = results["dns"]

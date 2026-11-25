@@ -1,3 +1,9 @@
+"""Automated tests for test final integration.
+
+These tests protect the documented behavior of the Domain Intelligence application
+and help detect regressions when implementation details are changed.
+"""
+
 from threading import Event
 
 from core import ScanMode, ScanRequest, ScanScope, ScannerEngine
@@ -40,6 +46,9 @@ def make_request(domain="example.com", modules=None):
 
 
 def test_module_error_does_not_stop_following_modules():
+    """Verify expected behavior for module error does not stop following modules.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     engine = ScannerEngine()
     engine.register_module(FailingModule())
     engine.register_module(SuccessfulModule())
@@ -57,6 +66,9 @@ def test_module_error_does_not_stop_following_modules():
 
 
 def test_unknown_module_is_recorded_without_crashing_scan():
+    """Verify expected behavior for unknown module is recorded without crashing scan.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     engine = ScannerEngine()
     result = engine.run_scan(make_request(modules=["modulo_inesistente"]))
 
@@ -67,6 +79,9 @@ def test_unknown_module_is_recorded_without_crashing_scan():
 
 
 def test_cancellation_stops_before_next_module():
+    """Verify expected behavior for cancellation stops before next module.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     engine = ScannerEngine()
     engine.register_module(CancellingModule())
     engine.register_module(SuccessfulModule())
@@ -79,6 +94,9 @@ def test_cancellation_stops_before_next_module():
 
 
 def test_completed_scan_can_be_saved_and_exported(tmp_path):
+    """Verify expected behavior for completed scan can be saved and exported.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     engine = ScannerEngine()
     engine.register_module(SuccessfulModule())
     scan = engine.run_scan(make_request(modules=["integration_success"]))
@@ -102,6 +120,9 @@ def test_completed_scan_can_be_saved_and_exported(tmp_path):
 
 
 def test_invalid_domain_fails_before_running_modules():
+    """Verify expected behavior for invalid domain fails before running modules.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     engine = ScannerEngine()
     engine.register_module(SuccessfulModule())
     result = engine.run_scan(make_request(domain="not_a_domain"))
@@ -111,6 +132,9 @@ def test_invalid_domain_fails_before_running_modules():
 
 
 def test_pre_cancelled_scan_does_not_run_modules():
+    """Verify expected behavior for pre cancelled scan does not run modules.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     engine = ScannerEngine()
     engine.register_module(SuccessfulModule())
     cancellation = Event()

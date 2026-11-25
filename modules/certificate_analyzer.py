@@ -1,18 +1,19 @@
 
+"""Inspect TLS certificate metadata for explicitly authorized hostnames."""
+
 import socket
 import ssl
 import ipaddress
 
 
 class CertificateAnalyzer:
-    """
-    Analizza il certificato TLS di un dominio autorizzato.
-    """
+    """Inspect certificate metadata without sending application credentials."""
 
     def __init__(self, timeout: float = 5.0):
         self.timeout = timeout
 
     def analyze(self, domain: str) -> dict:
+        """Connect to the hostname and return its presented TLS certificate details."""
 
         try:
 

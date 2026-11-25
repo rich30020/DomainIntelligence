@@ -1,3 +1,9 @@
+"""test website clone.
+
+This file contains test helpers or manual checks for the Domain Intelligence
+application. It is kept separate from the production application startup.
+"""
+
 from threading import Event
 from unittest.mock import Mock
 
@@ -41,6 +47,9 @@ HTML_B = """
 
 
 def test_website_parser_extracts_metadata():
+    """Verify expected behavior for website parser extracts metadata.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     parser = WebsiteParser()
 
     result = parser.parse(
@@ -56,6 +65,9 @@ def test_website_parser_extracts_metadata():
 
 
 def test_website_parser_ignores_unsafe_image_reference():
+    """Verify expected behavior for website parser ignores unsafe image reference.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     parser = WebsiteParser()
 
     html = """
@@ -72,6 +84,9 @@ def test_website_parser_ignores_unsafe_image_reference():
 
 
 def test_website_similarity_identical_pages():
+    """Verify expected behavior for website similarity identical pages.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     parser = WebsiteParser()
     similarity = WebsiteSimilarity()
 
@@ -85,6 +100,9 @@ def test_website_similarity_identical_pages():
 
 
 def test_website_similarity_missing_fields():
+    """Verify expected behavior for website similarity missing fields.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     similarity = WebsiteSimilarity()
 
     result = similarity.compare(
@@ -97,6 +115,9 @@ def test_website_similarity_missing_fields():
 
 
 def test_analyzer_requires_authorized_mode():
+    """Verify expected behavior for analyzer requires authorized mode.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     analyzer = WebsiteCloneAnalyzer(fetcher=Mock())
 
     context = ScanContext(
@@ -114,6 +135,9 @@ def test_analyzer_requires_authorized_mode():
 
 
 def test_analyzer_requires_both_domains_authorized():
+    """Verify expected behavior for analyzer requires both domains authorized.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     fetcher = Mock()
     analyzer = WebsiteCloneAnalyzer(fetcher=fetcher)
 
@@ -136,6 +160,9 @@ def test_analyzer_requires_both_domains_authorized():
 
 
 def test_analyzer_compares_two_authorized_domains():
+    """Verify expected behavior for analyzer compares two authorized domains.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     fetcher = Mock()
     fetcher.fetch.side_effect = [
         {

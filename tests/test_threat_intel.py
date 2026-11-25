@@ -1,3 +1,9 @@
+"""test threat intel.
+
+This file contains test helpers or manual checks for the Domain Intelligence
+application. It is kept separate from the production application startup.
+"""
+
 from threading import Event
 
 from core import ScanContext, ScanScope, ScanMode
@@ -19,6 +25,9 @@ def create_test_feed(tmp_path):
 
 
 def test_import_csv(tmp_path):
+    """Verify expected behavior for import csv.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     store = ThreatIntelStore()
     csv_path = create_test_feed(tmp_path)
 
@@ -30,6 +39,9 @@ def test_import_csv(tmp_path):
 
 
 def test_reject_invalid_domain(tmp_path):
+    """Verify expected behavior for reject invalid domain.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     csv_path = tmp_path / "invalid.csv"
 
     csv_path.write_text(
@@ -46,6 +58,9 @@ def test_reject_invalid_domain(tmp_path):
 
 
 def test_exact_domain_match(tmp_path):
+    """Verify expected behavior for exact domain match.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     store = ThreatIntelStore()
     store.import_csv(str(create_test_feed(tmp_path)))
 
@@ -60,6 +75,9 @@ def test_exact_domain_match(tmp_path):
 
 
 def test_subdomain_match(tmp_path):
+    """Verify expected behavior for subdomain match.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     store = ThreatIntelStore()
     store.import_csv(str(create_test_feed(tmp_path)))
 
@@ -74,6 +92,9 @@ def test_subdomain_match(tmp_path):
 
 
 def test_domain_boundary_protection(tmp_path):
+    """Verify expected behavior for domain boundary protection.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     store = ThreatIntelStore()
     store.import_csv(str(create_test_feed(tmp_path)))
 
@@ -88,6 +109,9 @@ def test_domain_boundary_protection(tmp_path):
 
 
 def test_analyzer_run(tmp_path):
+    """Verify expected behavior for analyzer run.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     store = ThreatIntelStore()
     store.import_csv(str(create_test_feed(tmp_path)))
 

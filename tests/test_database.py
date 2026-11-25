@@ -1,3 +1,9 @@
+"""Automated tests for test database.
+
+These tests protect the documented behavior of the Domain Intelligence application
+and help detect regressions when implementation details are changed.
+"""
+
 from types import SimpleNamespace
 
 import pytest
@@ -72,6 +78,9 @@ def create_fake_scan():
 
 
 def test_database_creation(tmp_path):
+    """Verify expected behavior for database creation.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     db_path = tmp_path / "test.db"
 
     service = DatabaseService(db_path)
@@ -82,6 +91,9 @@ def test_database_creation(tmp_path):
 
 
 def test_save_scan_result(tmp_path):
+    """Verify expected behavior for save scan result.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     service = DatabaseService(
         tmp_path / "test.db"
     )
@@ -98,6 +110,9 @@ def test_save_scan_result(tmp_path):
 
 
 def test_scan_history(tmp_path):
+    """Verify expected behavior for scan history.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     service = DatabaseService(
         tmp_path / "test.db"
     )
@@ -116,6 +131,9 @@ def test_scan_history(tmp_path):
 
 
 def test_scan_details(tmp_path):
+    """Verify expected behavior for scan details.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     service = DatabaseService(
         tmp_path / "test.db"
     )
@@ -136,6 +154,9 @@ def test_scan_details(tmp_path):
 
 
 def test_subdomains_are_saved_as_findings(tmp_path):
+    """Verify expected behavior for subdomains are saved as findings.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     service = DatabaseService(
         tmp_path / "test.db"
     )
@@ -160,6 +181,9 @@ def test_subdomains_are_saved_as_findings(tmp_path):
 
 
 def test_threat_intel_matches_are_saved(tmp_path):
+    """Verify expected behavior for threat intel matches are saved.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     service = DatabaseService(
         tmp_path / "test.db"
     )
@@ -186,6 +210,9 @@ def test_threat_intel_matches_are_saved(tmp_path):
 
 
 def test_duplicate_scan_is_rejected(tmp_path):
+    """Verify expected behavior for duplicate scan is rejected.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     service = DatabaseService(
         tmp_path / "test.db"
     )
@@ -201,6 +228,9 @@ def test_duplicate_scan_is_rejected(tmp_path):
 
 
 def test_missing_scan_returns_none(tmp_path):
+    """Verify expected behavior for missing scan returns none.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     service = DatabaseService(
         tmp_path / "test.db"
     )

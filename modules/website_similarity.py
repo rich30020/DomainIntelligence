@@ -1,8 +1,15 @@
+"""Compute weighted similarity between normalized website metadata records."""
+
 from difflib import SequenceMatcher
 from urllib.parse import urlparse
 
 
 class WebsiteSimilarity:
+    """Compare page metadata using transparent, feature-specific weights.
+
+    Similarity helps prioritize manual review; it is not proof of cloning,
+    phishing, or fraudulent intent.
+    """
 
     WEIGHTS = {
         "title": 20,
@@ -15,6 +22,7 @@ class WebsiteSimilarity:
 
     @staticmethod
     def _text_score(first, second) -> float:
+        """Return a normalized text similarity score for two non-empty values."""
         if not first or not second:
             return 0.0
 
@@ -26,6 +34,7 @@ class WebsiteSimilarity:
 
     @staticmethod
     def _reference_name(reference):
+        """Extract a stable comparison token from an asset reference."""
         if not reference:
             return None
 
@@ -35,6 +44,7 @@ class WebsiteSimilarity:
         return name.lower() if name else None
 
     def compare(self, first: dict, second: dict) -> dict:
+        """Calculate a weighted score and per-feature comparison evidence."""
         comparisons = {}
 
         for field in ("title", "description", "site_name"):
@@ -100,6 +110,7 @@ class WebsiteSimilarity:
 
     @staticmethod
     def classify(score: float) -> str:
+        """Map the numeric similarity score to a descriptive category."""
         if score >= 85:
             return "very_high"
         if score >= 70:

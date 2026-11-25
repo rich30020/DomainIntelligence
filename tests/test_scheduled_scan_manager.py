@@ -1,3 +1,9 @@
+"""Automated tests for test scheduled scan manager.
+
+These tests protect expected behavior and help detect regressions in the
+Domain Intelligence implementation.
+"""
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -35,6 +41,9 @@ def app():
 
 
 def test_manager_starts_and_timer_uses_configured_interval(app):
+    """Verify expected behavior for manager starts and timer uses configured interval.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     db = FakeDatabase([])
     manager = ScheduledScanManager(FakeEngine(), db, check_interval_ms=5000)
     manager.start()
@@ -44,6 +53,9 @@ def test_manager_starts_and_timer_uses_configured_interval(app):
 
 
 def test_manager_pause_and_resume(app):
+    """Verify expected behavior for manager pause and resume.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     manager = ScheduledScanManager(FakeEngine(), FakeDatabase([]))
     manager.start()
     manager.pause()
@@ -54,6 +66,9 @@ def test_manager_pause_and_resume(app):
 
 
 def test_manager_does_not_start_when_paused(app):
+    """Verify expected behavior for manager does not start when paused.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     db = FakeDatabase([{
         "id": 1, "domain": "example.com",
         "selected_modules": ["domain_scanner"],
@@ -66,6 +81,9 @@ def test_manager_does_not_start_when_paused(app):
 
 
 def test_manager_ignores_when_no_due_schedules(app):
+    """Verify expected behavior for manager ignores when no due schedules.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     db = FakeDatabase([])
     manager = ScheduledScanManager(FakeEngine(), db)
     manager.check_due_schedules()

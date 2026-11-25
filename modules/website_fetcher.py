@@ -1,3 +1,9 @@
+"""Fetch bounded HTTPS page content for authorized site comparisons.
+
+Connections are pinned to validated public IP addresses. Redirects are rejected
+and response bodies are size-limited to reduce SSRF and resource exhaustion.
+"""
+
 import http.client
 import ipaddress
 import socket
@@ -6,7 +12,7 @@ from urllib.parse import urlsplit
 
 
 class _PinnedHTTPSConnection(http.client.HTTPSConnection):
-    """HTTPSConnection che connette all'IP validato mantenendo SNI e verifica TLS sul dominio."""
+    """Connect to a validated IP while preserving hostname SNI and TLS checks."""
 
     def __init__(self, hostname, address, timeout):
         super().__init__(hostname, port=443, timeout=timeout, context=ssl.create_default_context())
@@ -24,6 +30,11 @@ class _PinnedHTTPSConnection(http.client.HTTPSConnection):
 
 
 class WebsiteFetcher:
+    """Fetch limited HTTPS responses after validating public DNS addresses.
+
+    The socket connects directly to an already validated IP. Redirects are
+    rejected and response bodies are bounded to keep requests predictable.
+    """
     MAX_HTML_BYTES = 1_000_000
 
     def __init__(self, timeout: float = 10.0):
@@ -31,6 +42,7 @@ class WebsiteFetcher:
 
     @staticmethod
     def validate_public_dns(domain: str) -> list[str]:
+        """Resolve a hostname and return only globally routable addresses."""
         try:
             answers = socket.getaddrinfo(
                 domain,
@@ -55,6 +67,7 @@ class WebsiteFetcher:
         return addresses
 
     def fetch(self, domain: str) -> dict:
+        """Fetch an authorized HTTPS host and return bounded response metadata."""
         domain = domain.strip().lower().rstrip(".")
         try:
             domain = domain.encode("idna").decode("ascii")
@@ -70,8 +83,8 @@ class WebsiteFetcher:
         ):
             raise ValueError("Inserire un nome dominio valido, non un URL.")
 
-        # Il socket si connette direttamente a uno degli IP già validati:
-        # non viene effettuata una seconda risoluzione DNS durante la connessione.
+        # Connect directly to an already validated IP. This avoids a second
+        # DNS resolution between address validation and socket establishment.
         addresses = self.validate_public_dns(domain)
         last_error = None
 
@@ -109,7 +122,8 @@ class WebsiteFetcher:
                     except ValueError as exc:
                         if "supera il limite" in str(exc):
                             raise
-                        # Content-Length malformato: si applica comunque il limite streaming.
+                        # If Content-Length is malformed, enforce the same limit while
+                        # streaming the response body in bounded chunks.
 
                 body = response.read(self.MAX_HTML_BYTES + 1)
                 if len(body) > self.MAX_HTML_BYTES:

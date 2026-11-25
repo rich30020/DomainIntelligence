@@ -1,3 +1,5 @@
+"""Main PySide6 interface for scans, findings, schedules, and screenshots."""
+
 import json
 import re
 from pathlib import Path
@@ -43,16 +45,19 @@ from modules.screenshot_visual_analyzer import ScreenshotVisualAnalyzer
 
 
 class ScreenshotCaptureWorker(QObject):
+    """Capture one authorized website screenshot outside the GUI thread."""
     completed = Signal(object)
     failed = Signal(str)
 
     def __init__(self, url, authorised_host, output_dir):
+        """Store the URL, exact authorized host, and screenshot destination."""
         super().__init__()
         self.url = url
         self.authorised_host = authorised_host
         self.output_dir = output_dir
 
     def run(self):
+        """Run the capture service and emit either a result or an error."""
         try:
             result = capture_authorised_site(
                 self.url,
@@ -65,12 +70,19 @@ class ScreenshotCaptureWorker(QObject):
 
 
 class MainWindow(QMainWindow):
+    """Compose the application interface and coordinate user-facing workflows.
+
+    The window delegates long-running scans and screenshot capture to QThread
+    workers, persists scan history through DatabaseService, and keeps the
+    individual result tabs synchronized with the most recent scan.
+    """
     def __init__(
         self,
         scanner_engine=None,
         database_service=None,
         scheduled_scan_manager=None,
     ):
+        """Initialize shared services, view state, and the main interface."""
         super().__init__()
 
         self.scanner_engine = scanner_engine
@@ -113,6 +125,7 @@ class MainWindow(QMainWindow):
             )
 
     def create_interface(self):
+        """Build the dashboard layout, analysis tabs, and control connections."""
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -670,6 +683,7 @@ class MainWindow(QMainWindow):
         self._apply_styles()
 
     def _create_module_checkbox(self, title, description, checked, key):
+        """Create a module selector and attach its stable engine module key."""
         checkbox = QCheckBox(f"{title}  —  {description}")
         checkbox.setChecked(checked)
         checkbox.setMinimumHeight(30)
@@ -702,6 +716,7 @@ class MainWindow(QMainWindow):
         return row
 
     def _apply_styles(self):
+        """Apply the shared visual theme to the window and its child widgets."""
         self.setStyleSheet("""
             QMainWindow, QScrollArea, QWidget {
                 background-color: #F3F6F9;
@@ -932,6 +947,7 @@ class MainWindow(QMainWindow):
 
 
     def start_screenshot_capture(self):
+        """Validate authorization inputs and launch the screenshot worker."""
         url = self.screenshot_url_input.text().strip()
         authorised_host = self.screenshot_authorised_host_input.text().strip().lower().rstrip(".")
         if not url or not authorised_host:
@@ -978,6 +994,7 @@ class MainWindow(QMainWindow):
         self.screenshot_thread.start()
 
     def on_screenshot_captured(self, result):
+        """Display and persist metadata for a successfully captured screenshot."""
         self.last_screenshot_result = result
         pixmap = QPixmap(result.screenshot_path)
         if not pixmap.isNull():
@@ -1005,16 +1022,19 @@ class MainWindow(QMainWindow):
                 )
 
     def on_screenshot_failed(self, error):
+        """Show a controlled error message when screenshot capture fails."""
         self.screenshot_status_label.setText(f"Acquisizione non riuscita: {error}")
         self.screenshot_preview.setText("Screenshot non disponibile.")
         QMessageBox.warning(self, "Screenshot non riuscito", error)
 
     def on_screenshot_thread_finished(self):
+        """Release screenshot worker references and re-enable capture controls."""
         self.capture_screenshot_button.setEnabled(True)
         self.screenshot_thread = None
         self.screenshot_worker = None
 
     def select_screenshot_reference(self):
+        """Choose a local reference screenshot and display its preview."""
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Seleziona screenshot di riferimento", "",
             "Immagini (*.png *.jpg *.jpeg *.bmp *.webp)"
@@ -1036,6 +1056,7 @@ class MainWindow(QMainWindow):
             )
 
     def compare_screenshots(self):
+        """Compare the latest capture with a locally selected reference image."""
         if self.last_screenshot_result is None or not self.screenshot_reference_path:
             QMessageBox.information(
                 self, "Confronto non disponibile",
@@ -1069,6 +1090,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Errore confronto", str(exc))
 
     def load_screenshot_history(self):
+        """Refresh the screenshot history table from persistent storage."""
         if self.database_service is None or not hasattr(self, "screenshot_history_table"):
             return
         try:
@@ -1097,6 +1119,7 @@ class MainWindow(QMainWindow):
             self.screenshot_status_label.setText(f"Errore storico screenshot: {exc}")
 
     def open_screenshot_history_record(self, row, column):
+        """Load the selected historical screenshot into the preview area."""
         if self.database_service is None:
             return
         try:
@@ -1151,6 +1174,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Storico screenshot", str(exc))
 
     def select_image(self):
+        """Let the operator select a local image for perceptual hashing."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Seleziona la prima immagine",
@@ -1162,6 +1186,7 @@ class MainWindow(QMainWindow):
             self.image_path_label.setText(file_path)
 
     def select_comparison_image(self):
+        """Let the operator select a second local image for comparison."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Seleziona la seconda immagine",
@@ -1173,6 +1198,7 @@ class MainWindow(QMainWindow):
             self.comparison_image_label.setText(file_path)
 
     def get_selected_modules(self):
+        """Return the stable module names selected in the analysis controls."""
         selected = []
         module_checks = (
             (self.domain_scanner_check, "domain_scanner"),
@@ -1189,6 +1215,7 @@ class MainWindow(QMainWindow):
         return selected
 
     def start_scan(self):
+        """Validate the form and start a scan without blocking the Qt event loop."""
         domain = self.domain_input.text().strip()
 
         if not domain:
@@ -1294,6 +1321,7 @@ class MainWindow(QMainWindow):
         self.scan_thread.start()
 
     def on_scan_completed(self, result):
+        """Update result views, calculate the risk indicator, and save the scan."""
         self.last_scan_result = result
         self.export_pdf_button.setEnabled(True)
         self.export_csv_button.setEnabled(True)
@@ -1329,6 +1357,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _create_results_table(headers):
+        """Create a read-only results table with consistent column behavior."""
         table = QTableWidget()
         table.setColumnCount(len(headers))
         table.setHorizontalHeaderLabels(headers)
@@ -1345,6 +1374,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _set_table_rows(table, rows):
+        """Replace table rows while temporarily disabling sorting for stable insertion."""
         table.setSortingEnabled(False)
         table.setRowCount(len(rows))
         for row_index, values in enumerate(rows):
@@ -1355,6 +1385,7 @@ class MainWindow(QMainWindow):
         table.setSortingEnabled(True)
 
     def _populate_structured_results(self, result):
+        """Populate module-specific tabs from the structured scan result."""
         self._set_table_rows(self.overview_table, [])
         self._set_table_rows(self.subdomains_table, [])
         self._set_table_rows(self.similar_table, [])
@@ -1496,6 +1527,7 @@ class MainWindow(QMainWindow):
         )
 
     def _populate_risk_assessment(self, result):
+        """Render the IOC-based risk assessment and its supporting evidence."""
         """Render the conservative IOC-based risk indicator for this scan."""
         try:
             assessment = self.risk_scoring_service.calculate(result)
@@ -1562,6 +1594,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _extract_registrar(rdap):
+        """Extract a readable registrar name from an RDAP entity payload."""
         registrar_data = rdap.get("registrar", [])
         try:
             for entry in registrar_data[1]:
@@ -1572,6 +1605,7 @@ class MainWindow(QMainWindow):
         return "—"
 
     def _update_scan_summary(self, result):
+        """Refresh the executive metrics and per-module status indicators."""
         module_results = getattr(result, "results", []) or []
 
         total_modules = len(module_results)
@@ -1620,6 +1654,7 @@ class MainWindow(QMainWindow):
             self.metric_values[key].setText(value)
 
     def on_scan_failed(self, error):
+        """Display a scan-level error without leaving the interface in busy state."""
         self.status_label.setText("Scansione non completata.")
         self.header_status.setText("ERRORE")
         self.results_output.setPlainText(error)
@@ -1631,12 +1666,14 @@ class MainWindow(QMainWindow):
             self.scheduled_scan_manager.resume()
 
     def on_scan_thread_finished(self):
+        """Release worker references and restore controls after a scan thread ends."""
         self.scan_thread = None
         self.scan_worker = None
         if self.scheduled_scan_manager is not None:
             self.scheduled_scan_manager.resume()
 
     def export_scan_pdf(self):
+        """Ask for a destination and export the latest result as a PDF report."""
         if self.last_scan_result is None:
             QMessageBox.information(self, "Esportazione PDF", "Non ci sono risultati da esportare.")
             return
@@ -1656,6 +1693,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Errore esportazione PDF", str(exc))
 
     def export_scan_csv(self):
+        """Ask for a destination and export the latest result as CSV data."""
         if self.last_scan_result is None:
             QMessageBox.information(self, "Esportazione CSV", "Non ci sono risultati da esportare.")
             return
@@ -1675,6 +1713,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Errore esportazione CSV", str(exc))
 
     def copy_results(self):
+        """Copy the formatted latest scan result to the system clipboard."""
         text = self.results_output.toPlainText()
         if not text:
             self.status_label.setText("Non ci sono risultati da copiare.")
@@ -1685,6 +1724,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def format_scan_result(result):
+        """Convert a structured scan result into readable, copyable text."""
         lines = [
             f"Dominio: {result.domain}",
             f"Stato: {result.status}",
@@ -1713,6 +1753,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _format_schedule_interval(minutes):
+        """Format a schedule interval as minutes, hours, or days."""
         minutes = int(minutes)
         if minutes < 60:
             return f"Ogni {minutes} min"
@@ -1725,6 +1766,7 @@ class MainWindow(QMainWindow):
         return f"Ogni {minutes} min"
 
     def create_schedule(self):
+        """Validate the form and persist a new recurring passive-scan schedule."""
         if self.database_service is None:
             QMessageBox.warning(self, "Database non disponibile",
                                 "Il servizio database non è disponibile.")
@@ -1758,6 +1800,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Impossibile creare la pianificazione", str(exc))
 
     def _selected_schedule_id(self):
+        """Return the ID stored on the currently selected schedule table row."""
         row = self.schedules_table.currentRow()
         if row < 0:
             return None
@@ -1765,6 +1808,7 @@ class MainWindow(QMainWindow):
         return item.data(Qt.ItemDataRole.UserRole) if item else None
 
     def toggle_selected_schedule(self):
+        """Enable or disable the schedule currently selected in the table."""
         schedule_id = self._selected_schedule_id()
         if schedule_id is None:
             QMessageBox.information(self, "Selezione richiesta",
@@ -1789,6 +1833,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Errore aggiornamento", str(exc))
 
     def delete_selected_schedule(self):
+        """Delete the selected recurring scan configuration after validation."""
         schedule_id = self._selected_schedule_id()
         if schedule_id is None:
             QMessageBox.information(self, "Selezione richiesta",
@@ -1810,6 +1855,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Errore eliminazione", str(exc))
 
     def load_schedules(self):
+        """Reload saved schedules and their next/last execution information."""
         if not hasattr(self, "schedules_table") or self.database_service is None:
             return
         try:
@@ -1844,10 +1890,12 @@ class MainWindow(QMainWindow):
             )
 
     def on_scheduled_status_changed(self, message):
+        """Display scheduler status updates in the monitoring tab."""
         if hasattr(self, "schedule_status_label"):
             self.schedule_status_label.setText(str(message))
 
     def on_scheduled_event(self, payload):
+        """Reflect scheduled-scan completion or failure in the dashboard."""
         self.load_schedules()
         self.load_history()
         domain = payload.get("domain", "dominio")
@@ -1861,6 +1909,7 @@ class MainWindow(QMainWindow):
             )
 
     def load_history(self):
+        """Refresh the scan history table using persisted database records."""
         if self.database_service is None:
             return
         try:
@@ -1888,6 +1937,7 @@ class MainWindow(QMainWindow):
             )
 
     def show_scan_details(self, row, column):
+        """Open a detailed view of the scan selected in the history table."""
         if self.database_service is None:
             return
         item = self.history_table.item(row, 0)
@@ -1923,6 +1973,7 @@ class MainWindow(QMainWindow):
 
 
     def closeEvent(self, event):
+        """Defer window closure while manual or screenshot worker threads remain active."""
         """Rimanda la chiusura finché i worker GUI non hanno terminato."""
         active_threads = [
             thread for thread in (self.scan_thread, self.screenshot_thread)
@@ -1939,6 +1990,7 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def _complete_deferred_close(self):
+        """Finish a previously requested close after active workers have stopped."""
         if not self._close_requested:
             return
         active = any(

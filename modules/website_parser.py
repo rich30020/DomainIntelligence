@@ -1,12 +1,20 @@
+"""Extract comparison-friendly metadata from fetched HTML documents."""
+
 from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
 
 class WebsiteParser:
+    """Parse page metadata and normalize safe asset references.
+
+    The parser does not fetch extracted assets; it only returns references
+    resolved against the supplied base URL.
+    """
 
     @staticmethod
     def _safe_reference(value: str, base_url: str):
+        """Resolve a reference while rejecting active and local-file schemes."""
         if not value:
             return None
 
@@ -26,6 +34,7 @@ class WebsiteParser:
         return absolute
 
     def parse(self, html: str, base_url: str) -> dict:
+        """Extract normalized title, description, branding, and asset metadata."""
         soup = BeautifulSoup(html, "html.parser")
 
         title = (

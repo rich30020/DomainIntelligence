@@ -1,3 +1,5 @@
+"""Resolve runtime resources and persistent writable application directories."""
+
 """Percorsi compatibili con avvio da sorgente e build PyInstaller."""
 from __future__ import annotations
 

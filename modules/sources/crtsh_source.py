@@ -1,12 +1,11 @@
 
+"""Query Certificate Transparency search for publicly logged certificate names."""
+
 import httpx
 
 
 class CRTSHSource:
-    """
-    Recupera nomi DNS dai certificati pubblici
-    presenti in Certificate Transparency.
-    """
+    """Retrieve DNS names from publicly logged Certificate Transparency entries."""
 
     name = "crtsh"
 
@@ -16,6 +15,7 @@ class CRTSHSource:
         self.timeout = timeout
 
     def search(self, domain: str) -> dict:
+        """Query crt.sh for certificate names associated with the supplied domain."""
 
         try:
 

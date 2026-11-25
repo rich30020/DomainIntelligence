@@ -1,3 +1,5 @@
+"""Coordinate recurring scans while keeping the GUI and database lifecycle safe."""
+
 from datetime import datetime, timezone
 
 from PySide6.QtCore import QCoreApplication, QObject, QThread, QTimer, Signal, Slot
@@ -6,11 +8,10 @@ from gui.scan_worker import ScanWorker
 
 
 class ScheduledScanManager(QObject):
-    """
-    Esegue una pianificazione alla volta senza bloccare il thread della GUI.
+    """Schedule due scans and serialize their execution through a Qt worker.
 
-    Il timer vive nel thread principale Qt; la scansione vera e propria viene
-    eseguita da ScanWorker in un QThread separato.
+    Only one scheduled scan is active at a time. The manager pauses cleanly
+    during manual GUI scans and stops its timer before application shutdown.
     """
 
     status_changed = Signal(str)
@@ -24,6 +25,7 @@ class ScheduledScanManager(QObject):
         check_interval_ms=15000,
         parent=None,
     ):
+        """Initialize the scheduler timer, service references, and worker state."""
         super().__init__(parent)
         self.scanner_engine = scanner_engine
         self.database_service = database_service
@@ -43,6 +45,7 @@ class ScheduledScanManager(QObject):
         return self.thread is not None and self.thread.isRunning()
 
     def start(self):
+        """Start the polling timer used to detect due schedule records."""
         if self._stopping:
             return
         self._paused = False
@@ -51,11 +54,12 @@ class ScheduledScanManager(QObject):
         self.check_due_schedules()
 
     def pause(self):
-        """Sospende nuove scansioni pianificate; non interrompe quella attiva."""
+        """Temporarily suspend dispatch of scheduled scans."""
         self._paused = True
         self.timer.stop()
 
     def resume(self):
+        """Resume schedule polling after a manual scan has finished."""
         if self._stopping:
             return
         self._paused = False
@@ -65,6 +69,7 @@ class ScheduledScanManager(QObject):
 
     @Slot()
     def check_due_schedules(self):
+        """Poll the database and dispatch the earliest due schedule if idle."""
         if self._stopping or self._paused or self.is_busy:
             return
 
@@ -79,12 +84,13 @@ class ScheduledScanManager(QObject):
         if not due_items:
             return
 
-        # Una sola scansione pianificata alla volta: le altre restano in coda
-        # nel database e verranno recuperate al successivo controllo.
+        # Run only one scheduled scan at a time. Other due schedules remain in
+        # the database and are picked up by a later polling cycle.
         schedule = due_items[0]
         self._start_schedule(schedule)
 
     def _start_schedule(self, schedule):
+        """Create and start a QThread worker for one selected schedule record."""
         self.active_schedule = schedule
         self.status_changed.emit(
             f"Monitoraggio in esecuzione: {schedule['domain']}"
@@ -110,6 +116,7 @@ class ScheduledScanManager(QObject):
 
     @Slot(object)
     def _on_scan_completed(self, result):
+        """Persist a completed run and update its recurring-schedule metadata."""
         schedule = self.active_schedule or {}
         error = None
         try:
@@ -149,6 +156,7 @@ class ScheduledScanManager(QObject):
 
     @Slot(str)
     def _on_scan_failed(self, error_message):
+        """Record a failed scheduled run and expose the error through a signal."""
         schedule = self.active_schedule or {}
         error = str(error_message)
 
@@ -174,28 +182,26 @@ class ScheduledScanManager(QObject):
 
     @Slot()
     def _on_thread_finished(self):
+        """Release worker references and resume polling when shutdown is not active."""
         self.thread = None
         self.worker = None
         self.active_schedule = None
 
         if not self._stopping and not self._paused:
-            # Lascia terminare le notifiche Qt correnti prima di avviare
-            # un'eventuale pianificazione successiva.
+            # Let queued Qt notifications finish before dispatching another
+            # scheduled item.
             QTimer.singleShot(250, self.check_due_schedules)
 
     def shutdown(self):
-        """
-        Ferma il timer e attende la scansione attiva prima della chiusura
-        completa, così il database non viene chiuso mentre il worker lo usa.
-        """
+        """Stop scheduling and wait for any active worker before teardown."""
         self._stopping = True
         self._paused = True
         self.timer.stop()
 
         if self.thread is not None and self.thread.isRunning():
             self.thread.quit()
-            # Attesa limitata: evitare un blocco infinito della chiusura.
-            # Se il worker non termina, non dichiarare shutdown completato.
+            # Use a bounded wait so application shutdown cannot block indefinitely.
+            # Do not mark shutdown as complete while a worker is still running.
             if not self.thread.wait(30000):
                 self.status_changed.emit(
                     "Chiusura in attesa: la scansione pianificata non è ancora terminata."
@@ -204,8 +210,8 @@ class ScheduledScanManager(QObject):
                     "La scansione pianificata è ancora attiva dopo 30 secondi. "
                     "Il database non deve essere chiuso mentre il worker è in esecuzione."
                 )
-            # Consegna i segnali queued (salvataggio risultato e aggiornamento
-            # pianificazione) prima che main.py chiuda il database.
+            # Process queued signals (result persistence and schedule updates) before
+            # main.py closes the database connection.
             QCoreApplication.processEvents()
 
         self.thread = None

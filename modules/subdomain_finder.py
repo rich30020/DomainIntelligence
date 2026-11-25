@@ -1,4 +1,6 @@
 
+"""Discover subdomains from public sources, normalize them, and verify DNS."""
+
 from core.scope_manager import ScanMode
 
 from modules.subdomain_normalizer import SubdomainNormalizer
@@ -10,6 +12,12 @@ from modules.sources.otx_source import OTXSource
 
 
 class SubdomainFinder:
+    """Combine passive data sources into a deduplicated subdomain inventory.
+
+    Source failures are tracked independently so one unavailable provider does
+    not discard records returned by the others. DNS verification is a separate
+    enrichment step and does not probe application services or ports.
+    """
 
     name = "subdomain_finder"
 
@@ -27,6 +35,7 @@ class SubdomainFinder:
         self.verifier = SubdomainVerifier()
 
     def run(self, context, cancellation_event):
+        """Collect, normalize, deduplicate, and verify discovered hostnames."""
 
         domain = context.domain
 
@@ -39,7 +48,7 @@ class SubdomainFinder:
         raw_records = []
         source_results = []
 
-        # 1. Raccolta dalle fonti pubbliche.
+        # 1. Collect candidate hostnames from public information sources.
 
         for source in self.sources:
 
@@ -60,7 +69,7 @@ class SubdomainFinder:
                 if not response["success"]:
                     continue
 
-                # Certificate Transparency.
+                # Certificate Transparency records can reveal names on issued certificates.
                 if source.name == "crtsh":
 
                     for hostname in response.get(
@@ -72,7 +81,7 @@ class SubdomainFinder:
                             "source": source.name
                         })
 
-                # HackerTarget e OTX.
+                # HackerTarget and OTX provide additional public DNS observations.
                 else:
 
                     for record in response.get(
@@ -96,14 +105,14 @@ class SubdomainFinder:
                     "error": str(exc)
                 })
 
-        # 2. Normalizzazione e deduplicazione.
+        # 2. Normalize hostnames and deduplicate repeated source observations.
 
         subdomains = self.normalizer.process(
             domain,
             raw_records
         )
 
-        # 3. Verifica DNS.
+        # 3. Verify DNS resolution for each normalized hostname.
 
         for subdomain in subdomains:
 
@@ -121,7 +130,7 @@ class SubdomainFinder:
                 if address not in subdomain["ip_addresses"]:
                     subdomain["ip_addresses"].append(address)
 
-        # 4. Risultati finali.
+        # 4. Assemble the final results with status and source provenance.
 
         return {
             "root_domain": domain,

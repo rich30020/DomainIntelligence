@@ -1,3 +1,9 @@
+"""test threat intel manual.
+
+This file contains test helpers or manual checks for the Domain Intelligence
+application. It is kept separate from the production application startup.
+"""
+
 from pathlib import Path
 
 from services.threat_intel_store import ThreatIntelStore
@@ -5,11 +11,11 @@ from modules.threat_intel_analyzer import ThreatIntelAnalyzer
 from threading import Event
 
 
-# Percorso del feed di test
+# Path to the sample test feed
 feed_path = Path("data/threat_intel/sample_iocs.csv")
 
 
-# Importazione degli indicatori
+# Import the indicators
 store = ThreatIntelStore()
 
 import_result = store.import_csv(str(feed_path))
@@ -19,11 +25,11 @@ print("Importati:", import_result["imported"])
 print("Rifiutati:", import_result["rejected"])
 
 
-# Creazione motore
+# Create the scanner engine
 analyzer = ThreatIntelAnalyzer(store)
 
 
-# Domini simulati da analizzare
+# Simulated domains to analyze
 domains = [
     "bad-example.test",
     "login.bad-example.test",

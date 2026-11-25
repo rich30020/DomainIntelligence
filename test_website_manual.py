@@ -1,3 +1,9 @@
+"""test website manual.
+
+This file contains test helpers or manual checks for the Domain Intelligence
+application. It is kept separate from the production application startup.
+"""
+
 from core import (
     ScannerEngine,
     ScanRequest,
@@ -9,7 +15,7 @@ from modules import WebsiteCloneAnalyzer
 
 
 # ==========================================
-# CONFIGURAZIONE
+# CONFIGURATION
 # ==========================================
 
 DOMINIO_PRINCIPALE = "apsprofili.com    "
@@ -17,7 +23,7 @@ DOMINIO_DA_CONFRONTARE = "TUO-SECONDO-DOMINIO.it"
 
 
 # ==========================================
-# CONTROLLO CONFIGURAZIONE
+# CONFIGURATION CHECK
 # ==========================================
 
 if (
@@ -30,7 +36,7 @@ if (
 
 
 # ==========================================
-# CREAZIONE MOTORE
+# ENGINE CREATION
 # ==========================================
 
 engine = ScannerEngine()
@@ -39,7 +45,7 @@ engine.register_module(WebsiteCloneAnalyzer())
 
 
 # ==========================================
-# DEFINIZIONE SCOPE AUTORIZZATO
+# DECLARE AUTHORIZED SCOPE
 # ==========================================
 
 scope = ScanScope(
@@ -53,7 +59,7 @@ scope = ScanScope(
 
 
 # ==========================================
-# CREAZIONE RICHIESTA
+# BUILD SCAN REQUEST
 # ==========================================
 
 request = ScanRequest(
@@ -67,7 +73,7 @@ request = ScanRequest(
 
 
 # ==========================================
-# ESECUZIONE
+# EXECUTION
 # ==========================================
 
 print("\nAvvio confronto dei siti...\n")
@@ -76,7 +82,7 @@ result = engine.run_scan(request)
 
 
 # ==========================================
-# VISUALIZZAZIONE RISULTATI
+# DISPLAY RESULTS
 # ==========================================
 
 print("STATO SCANSIONE:", result.status)
