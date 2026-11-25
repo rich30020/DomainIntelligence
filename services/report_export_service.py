@@ -1,3 +1,5 @@
+"""Export scan results to human-readable PDF and spreadsheet-friendly CSV files."""
+
 import csv
 import json
 from xml.sax.saxutils import escape
@@ -5,7 +7,12 @@ from pathlib import Path
 
 
 class ReportExportService:
-    """Esporta i risultati di una scansione in PDF e CSV."""
+    """Transform structured scan results into portable PDF and CSV reports.
+
+    The exporter keeps provenance and module status visible. CSV values are
+    neutralized against spreadsheet formula injection, and PDF text is escaped
+    before it is passed to ReportLab paragraph markup.
+    """
 
     @staticmethod
     def _read(value, key, default=None):
@@ -33,7 +40,7 @@ class ReportExportService:
 
     @staticmethod
     def _safe_csv_cell(value):
-        """Neutralizza celle che Excel/Calc potrebbe interpretare come formule."""
+        """Prefix spreadsheet formula-like values so CSV imports treat them as text."""
         text = "" if value is None else str(value)
         probe = text.lstrip(" \\t\\r\\n")
         if probe.startswith(("=", "+", "-", "@")):
@@ -41,6 +48,7 @@ class ReportExportService:
         return text
 
     def export_csv(self, result, destination):
+        """Write module outcomes and their structured data to a UTF-8 CSV file."""
         data = self._report_data(result)
         path = Path(destination)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -69,6 +77,7 @@ class ReportExportService:
         return path
 
     def export_pdf(self, result, destination):
+        """Build a paginated PDF summary with per-module details and caveats."""
         try:
             from reportlab.lib import colors
             from reportlab.lib.enums import TA_CENTER
@@ -135,7 +144,8 @@ class ReportExportService:
                 ))
             if module["data"] is not None:
                 payload = json.dumps(module["data"], ensure_ascii=False, indent=2, default=str)
-                # ReportLab Paragraph is not a safe container for arbitrary JSON markup.
+                # Render JSON as preformatted text rather than Paragraph markup;
+                # arbitrary payload characters must not be interpreted as XML.
                 from reportlab.platypus import Preformatted
                 parts.append(Preformatted(payload[:12000], styles["Code"]))
             story.extend([KeepTogether(parts), Spacer(1, 3*mm)])

@@ -1,3 +1,5 @@
+"""Compare two explicitly authorized websites using bounded page metadata."""
+
 import re
 
 from core.scope_manager import ScanMode
@@ -7,6 +9,12 @@ from modules.website_similarity import WebsiteSimilarity
 
 
 class WebsiteCloneAnalyzer:
+    """Fetch and compare two authorized sites without submitting forms.
+
+    The analyzer combines parsed page metadata with weighted similarity
+    features. A high similarity score is a review lead, not proof of cloning
+    or fraud; results must be interpreted with source and authorization context.
+    """
     name = "website_clone_analyzer"
     requires_active = True
 
@@ -17,6 +25,7 @@ class WebsiteCloneAnalyzer:
 
     @staticmethod
     def _normalize_domain(domain: str) -> str:
+        """Normalize a domain value before constructing its HTTPS URL."""
         if not isinstance(domain, str):
             raise ValueError("Dominio non valido.")
 
@@ -49,6 +58,7 @@ class WebsiteCloneAnalyzer:
         return domain
 
     def run(self, context, cancellation_event):
+        """Compare the authorized original and comparison websites."""
         if context.scope.mode != ScanMode.AUTHORIZED:
             raise PermissionError(
                 "Il Website Clone Analyzer richiede "

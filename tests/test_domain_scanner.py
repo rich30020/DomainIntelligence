@@ -1,3 +1,9 @@
+"""Automated tests for test domain scanner.
+
+These tests protect the documented behavior of the Domain Intelligence application
+and help detect regressions when implementation details are changed.
+"""
+
 
 from threading import Event
 from unittest.mock import Mock
@@ -36,6 +42,9 @@ def create_scanner():
 
 
 def test_domain_scanner():
+    """Verify expected behavior for domain scanner.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
 
     engine = ScannerEngine()
 
@@ -67,6 +76,9 @@ def test_domain_scanner():
 
 
 def test_domain_normalization():
+    """Verify expected behavior for domain normalization.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
 
     scanner = DomainScanner()
 
@@ -78,6 +90,9 @@ def test_domain_normalization():
 
 
 def test_invalid_domain():
+    """Verify expected behavior for invalid domain.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
 
     scanner = DomainScanner()
 
@@ -87,6 +102,9 @@ def test_invalid_domain():
 
 
 def test_cancelled_scan():
+    """Verify expected behavior for cancelled scan.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
 
     scanner = create_scanner()
 

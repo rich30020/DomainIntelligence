@@ -1,3 +1,9 @@
+"""Automated tests for test report export security.
+
+These tests protect the documented behavior of the Domain Intelligence application
+and help detect regressions when implementation details are changed.
+"""
+
 import csv
 
 from services.report_export_service import ReportExportService
@@ -9,6 +15,9 @@ class Obj:
 
 
 def test_csv_neutralises_formula_like_cells(tmp_path):
+    """Verify expected behavior for csv neutralises formula like cells.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     result = Obj(
         domain='=HYPERLINK("https://bad.example")',
         status="completed",
@@ -35,5 +44,8 @@ def test_csv_neutralises_formula_like_cells(tmp_path):
 
 
 def test_csv_keeps_normal_cells_unchanged():
+    """Verify expected behavior for csv keeps normal cells unchanged.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     assert ReportExportService._safe_csv_cell("example.com") == "example.com"
     assert ReportExportService._safe_csv_cell(None) == ""

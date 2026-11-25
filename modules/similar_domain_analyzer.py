@@ -1,4 +1,6 @@
 
+"""Enrich generated lookalike candidates using public registration data."""
+
 from core.scope_manager import ScanMode
 from modules.similar_domain_generator import SimilarDomainGenerator
 from modules.domain_similarity import DomainSimilarity
@@ -6,6 +8,11 @@ from services.rdap_service import RDAPService
 
 
 class SimilarDomainAnalyzer:
+    """Generate candidate lookalikes and optionally check their RDAP records.
+
+    This module is passive: RDAP enrichment queries a public registration-data
+    service and does not connect to candidate websites or attempt interaction.
+    """
     name = "similar_domain_analyzer"
     requires_active = False
 
@@ -22,6 +29,7 @@ class SimilarDomainAnalyzer:
         self.rdap_service = rdap_service or RDAPService()
 
     def _check_rdap(self, domain: str) -> dict:
+        """Retrieve public registration metadata for one candidate domain."""
         try:
             response = self.rdap_service.get_domain_info(domain)
 
@@ -66,6 +74,7 @@ class SimilarDomainAnalyzer:
             }
 
     def run(self, context, cancellation_event):
+        """Return bounded lookalike candidates with similarity and RDAP context."""
         if context.scope.mode != ScanMode.PASSIVE:
             raise PermissionError(
                 "Il Similar Domain Analyzer utilizza esclusivamente "

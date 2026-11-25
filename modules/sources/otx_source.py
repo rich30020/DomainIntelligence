@@ -1,11 +1,11 @@
 
+"""Query AlienVault OTX public Passive DNS indicator data."""
+
 import httpx
 
 
 class OTXSource:
-    """
-    Recupera osservazioni Passive DNS da AlienVault OTX.
-    """
+    """Retrieve Passive DNS observations from AlienVault OTX."""
 
     name = "otx"
 
@@ -21,6 +21,7 @@ class OTXSource:
         self.timeout = timeout
 
     def search(self, domain: str) -> dict:
+        """Fetch OTX observations using the optional API key when configured."""
 
         url = f"{self.BASE_URL}{domain}/passive_dns"
 

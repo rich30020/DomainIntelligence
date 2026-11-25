@@ -1,8 +1,15 @@
 
+"""Apply filename heuristics to identify image files that may be logos."""
+
 from pathlib import Path
 
 
 class LogoDetector:
+    """Identify likely logo assets by filename keywords only.
+
+    This lightweight heuristic does not inspect image pixels or perform
+    machine-learning-based visual logo recognition.
+    """
     name = "logo_detector"
     requires_active = False
 
@@ -15,6 +22,7 @@ class LogoDetector:
     )
 
     def detect(self, image_path: str) -> dict:
+        """Score a local filename against the configured branding keywords."""
         path = Path(image_path)
 
         if not path.exists() or not path.is_file():
@@ -38,6 +46,7 @@ class LogoDetector:
         }
 
     def run(self, context, cancellation_event):
+        """Run the filename heuristic using the image path in scan metadata."""
         if cancellation_event.is_set():
             return {"cancelled": True}
 

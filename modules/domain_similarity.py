@@ -1,9 +1,17 @@
+"""Measure textual similarity between domain labels."""
+
 from difflib import SequenceMatcher
 
 
 class DomainSimilarity:
+    """Provide a normalized string-similarity measure for domain candidates.
+
+    Similarity is only a ranking heuristic; it does not establish shared
+    ownership or malicious activity.
+    """
     @staticmethod
     def calculate(original: str, candidate: str) -> float:
+        """Return a normalized similarity ratio between the domain labels."""
         original = original.lower().strip().rstrip(".")
         candidate = candidate.lower().strip().rstrip(".")
 
@@ -20,6 +28,7 @@ class DomainSimilarity:
 
     @staticmethod
     def classify(score: float) -> str:
+        """Map a similarity ratio to a human-readable category."""
         if score >= 90:
             return "very_high"
         if score >= 75:

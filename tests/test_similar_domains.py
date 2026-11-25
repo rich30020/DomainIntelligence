@@ -1,3 +1,9 @@
+"""test similar domains.
+
+This file contains test helpers or manual checks for the Domain Intelligence
+application. It is kept separate from the production application startup.
+"""
+
 from threading import Event
 from unittest.mock import Mock
 
@@ -8,6 +14,9 @@ from modules.similar_domain_analyzer import SimilarDomainAnalyzer
 
 
 def test_generator_creates_candidates():
+    """Verify expected behavior for generator creates candidates.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     generator = SimilarDomainGenerator()
     results = generator.generate("example.com")
 
@@ -16,6 +25,9 @@ def test_generator_creates_candidates():
 
 
 def test_generator_respects_limit():
+    """Verify expected behavior for generator respects limit.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     generator = SimilarDomainGenerator(max_candidates=5)
     results = generator.generate("example.com")
 
@@ -23,6 +35,9 @@ def test_generator_respects_limit():
 
 
 def test_generator_removes_duplicates():
+    """Verify expected behavior for generator removes duplicates.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     generator = SimilarDomainGenerator()
     results = generator.generate("example.com")
 
@@ -31,6 +46,9 @@ def test_generator_removes_duplicates():
 
 
 def test_similarity_score():
+    """Verify expected behavior for similarity score.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     score = DomainSimilarity.calculate(
         "example.com",
         "examp1e.com",
@@ -41,6 +59,9 @@ def test_similarity_score():
 
 
 def test_similarity_classification():
+    """Verify expected behavior for similarity classification.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     assert DomainSimilarity.classify(95) == "very_high"
     assert DomainSimilarity.classify(80) == "high"
     assert DomainSimilarity.classify(60) == "medium"
@@ -48,6 +69,9 @@ def test_similarity_classification():
 
 
 def test_analyzer_passive_scan():
+    """Verify expected behavior for analyzer passive scan.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     rdap = Mock()
     rdap.get_domain.return_value = {
         "success": True,
@@ -80,6 +104,9 @@ def test_analyzer_passive_scan():
 
 
 def test_analyzer_rejects_authorized_mode():
+    """Verify expected behavior for analyzer rejects authorized mode.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     analyzer = SimilarDomainAnalyzer(
         rdap_service=Mock(),
     )
@@ -103,6 +130,9 @@ def test_analyzer_rejects_authorized_mode():
 
 
 def test_analyzer_handles_rdap_failure():
+    """Verify expected behavior for analyzer handles rdap failure.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     rdap = Mock()
     rdap.get_domain.side_effect = Exception("Servizio non disponibile")
 

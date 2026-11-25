@@ -1,3 +1,9 @@
+"""test subdomain finder.
+
+This file contains test helpers or manual checks for the Domain Intelligence
+application. It is kept separate from the production application startup.
+"""
+
 
 from threading import Event
 from unittest.mock import Mock
@@ -9,6 +15,9 @@ from modules.subdomain_finder import SubdomainFinder
 
 
 def test_normalize_hostname():
+    """Verify expected behavior for normalize hostname.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
 
     normalizer = SubdomainNormalizer()
 
@@ -20,6 +29,9 @@ def test_normalize_hostname():
 
 
 def test_reject_invalid_hostname():
+    """Verify expected behavior for reject invalid hostname.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
 
     normalizer = SubdomainNormalizer()
 
@@ -29,6 +41,9 @@ def test_reject_invalid_hostname():
 
 
 def test_domain_boundary():
+    """Verify expected behavior for domain boundary.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
 
     normalizer = SubdomainNormalizer()
 
@@ -44,6 +59,9 @@ def test_domain_boundary():
 
 
 def test_remove_duplicates():
+    """Verify expected behavior for remove duplicates.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
 
     normalizer = SubdomainNormalizer()
 
@@ -72,6 +90,9 @@ def test_remove_duplicates():
 
 
 def test_subdomain_finder():
+    """Verify expected behavior for subdomain finder.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
 
     finder = SubdomainFinder()
 

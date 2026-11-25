@@ -1,3 +1,5 @@
+"""Qt worker that runs a scan without blocking the GUI event loop."""
+
 from threading import Event
 
 from PySide6.QtCore import QObject, Signal, Slot
@@ -6,6 +8,11 @@ from core import ScanRequest, ScanScope, ScanMode
 
 
 class ScanWorker(QObject):
+    """Run one scan in a QThread and report its outcome through Qt signals.
+
+    The worker contains no widget logic. Keeping scan execution separate from
+    the main thread allows the interface to remain responsive during analysis.
+    """
     completed = Signal(object)
     failed = Signal(str)
     finished = Signal()
@@ -19,6 +26,7 @@ class ScanWorker(QObject):
         comparison_image_path=None,
         cancellation_event=None,
     ):
+        """Store scan inputs and create a cooperative cancellation token."""
         super().__init__()
         self.scanner_engine = scanner_engine
         self.domain = domain
@@ -29,14 +37,23 @@ class ScanWorker(QObject):
 
     @Slot()
     def run(self):
+        """Build a passive request, execute it, and always emit ``finished``.
+
+        The final signal lets the owning window release worker/thread references
+        even when request construction or scan execution raises an exception.
+        """
         try:
             if self.cancellation_event.is_set():
                 raise RuntimeError("Scansione annullata prima dell'avvio.")
 
+            # GUI-triggered scans use passive scope by default. Modules that
+            # require active checks are therefore rejected by the engine.
             scope = ScanScope(
                 root_domain=self.domain,
                 mode=ScanMode.PASSIVE,
             )
+            # Pass optional image paths as metadata so analysis modules do not
+            # need dependencies on GUI widgets or file-picker controls.
             metadata = {}
             if self.image_path:
                 metadata["image_path"] = self.image_path
@@ -57,4 +74,5 @@ class ScanWorker(QObject):
         except Exception as exc:
             self.failed.emit(f"{type(exc).__name__}: {exc}")
         finally:
+            # Always notify the QThread owner, on both success and failure.
             self.finished.emit()

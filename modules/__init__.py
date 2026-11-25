@@ -1,3 +1,5 @@
+"""Public exports for the analysis modules registered by the application."""
+
 from modules.domain_scanner import DomainScanner
 from modules.dns_analyzer import DNSAnalyzer
 from modules.certificate_analyzer import CertificateAnalyzer

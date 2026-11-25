@@ -1,3 +1,5 @@
+"""Application entry point wiring the GUI, modules, and shared services."""
+
 import sys
 from pathlib import Path
 
@@ -24,6 +26,7 @@ from services.scheduled_scan_manager import ScheduledScanManager
 
 
 def create_scanner_engine(threat_intel_store):
+    """Create the scanner and register the modules exposed by the GUI."""
     engine = ScannerEngine()
 
     engine.register_module(DomainScanner())
@@ -41,9 +44,12 @@ def create_scanner_engine(threat_intel_store):
 
 
 def main():
+    """Initialize the desktop application and coordinate service shutdown."""
     app = QApplication(sys.argv)
     app.setApplicationName("Domain Intelligence")
 
+    # Load the bundled sample feed when available. A missing local feed should
+    # not prevent the desktop application from starting.
     threat_intel_store = ThreatIntelStore()
     feed_path = resource_path(Path("data") / "threat_intel" / "sample_iocs.csv")
 
@@ -56,6 +62,8 @@ def main():
     scanner_engine = create_scanner_engine(threat_intel_store)
     database_service = DatabaseService()
 
+    # Manual and scheduled scans share the same engine and database service,
+    # keeping module registration and persistence behavior consistent.
     scheduled_scan_manager = ScheduledScanManager(
         scanner_engine=scanner_engine,
         database_service=database_service,
@@ -68,8 +76,8 @@ def main():
         scheduled_scan_manager=scheduled_scan_manager,
     )
 
-    # Alla chiusura completa della finestra l'app termina: il manager ferma
-    # il timer e attende l'eventuale scansione attiva prima di chiudere SQLite.
+    # Stop the scheduler before closing SQLite. The manager stops its timer
+    # and waits for an active scheduled scan before the database is closed.
     app.aboutToQuit.connect(scheduled_scan_manager.shutdown)
     app.aboutToQuit.connect(database_service.close)
 

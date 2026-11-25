@@ -1,3 +1,9 @@
+"""Automated tests for test report export service.
+
+These tests protect the documented behavior of the Domain Intelligence application
+and help detect regressions when implementation details are changed.
+"""
+
 import csv
 from pathlib import Path
 
@@ -32,6 +38,9 @@ def sample_result():
 
 
 def test_export_csv_creates_rows_for_modules(tmp_path):
+    """Verify expected behavior for export csv creates rows for modules.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     target = tmp_path / "report.csv"
     ReportExportService().export_csv(sample_result(), target)
     assert target.exists()
@@ -44,6 +53,9 @@ def test_export_csv_creates_rows_for_modules(tmp_path):
 
 
 def test_export_pdf_creates_valid_pdf(tmp_path):
+    """Verify expected behavior for export pdf creates valid pdf.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     target = tmp_path / "report.pdf"
     ReportExportService().export_pdf(sample_result(), target)
     assert target.exists()
@@ -51,6 +63,9 @@ def test_export_pdf_creates_valid_pdf(tmp_path):
 
 
 def test_export_csv_supports_dict_results(tmp_path):
+    """Verify expected behavior for export csv supports dict results.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     target = tmp_path / "dict.csv"
     result = {
         "domain": "example.org",

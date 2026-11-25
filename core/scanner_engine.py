@@ -1,3 +1,11 @@
+"""Core orchestration engine for Domain Intelligence.
+
+This module defines the request, execution context, per-module result, and final
+scan result data structures. It also provides the engine that validates a scan's
+scope, runs the selected analysis modules, isolates module failures, supports
+cooperative cancellation, and emits lifecycle events for the graphical interface.
+"""
+
 
 import re
 
@@ -16,6 +24,7 @@ from core.scope_manager import (
 
 @dataclass
 class ScanRequest:
+    """Describe one scan, including its authorization scope and selected modules."""
 
     domain: str
     scope: ScanScope
@@ -28,6 +37,7 @@ class ScanRequest:
 
 @dataclass
 class ScanContext:
+    """Share scan identity and caller-provided metadata with analysis modules."""
 
     scan_id: str
     domain: str
@@ -43,6 +53,7 @@ class ScanContext:
 
 @dataclass
 class ModuleResult:
+    """Capture one module execution outcome without failing the whole scan."""
 
     module_name: str
     success: bool
@@ -61,6 +72,7 @@ class ModuleResult:
 
 @dataclass
 class ScanResult:
+    """Aggregate scan status, timestamps, and ordered module results."""
 
     scan_id: str
     domain: str
@@ -76,8 +88,12 @@ class ScanResult:
 
 
 class ScannerEngine:
-    """
-    Motore centrale di Domain Intelligence.
+    """Coordinate validation, scope enforcement, module execution, and events.
+
+    Modules are registered by name and invoked independently. A module-level
+    exception is recorded in its result so later modules can still run. Modules
+    that require active checks are skipped unless the domain is explicitly
+    included in the authorization scope.
     """
 
     def __init__(self, event_manager=None):
@@ -89,6 +105,7 @@ class ScannerEngine:
         self.modules = {}
 
     def register_module(self, module):
+        """Register a module exposing a unique ``name`` and callable ``run``."""
 
         if not hasattr(module, "name"):
             raise ValueError(
@@ -104,6 +121,7 @@ class ScannerEngine:
 
     @staticmethod
     def validate_domain(domain: str) -> bool:
+        """Return whether the value has a syntactically valid DNS hostname format."""
 
         if not isinstance(domain, str):
             return False
@@ -127,6 +145,11 @@ class ScannerEngine:
         request: ScanRequest,
         cancellation_event: Event | None = None
     ) -> ScanResult:
+        """Execute requested modules and return the complete scan outcome.
+
+        Cancellation is cooperative: the engine checks the event between
+        modules, while each long-running module should also check it internally.
+        """
 
         cancellation_event = (
             cancellation_event or Event()
@@ -147,6 +170,8 @@ class ScannerEngine:
 
         try:
 
+            # Canonicalize once so validation, scope checks, and modules all use
+            # the same lowercase hostname without a trailing root dot.
             domain = (
                 request.domain.strip()
                 .lower()
@@ -158,6 +183,8 @@ class ScannerEngine:
                     "Il dominio inserito non è valido."
                 )
 
+            # Enforce the declared scope before building context or invoking
+            # modules. This is the central authorization gate for each scan.
             if not self.scope_manager.validate_scope(
                 request.scope
             ):
@@ -187,6 +214,8 @@ class ScannerEngine:
                 }
             )
 
+            # An empty selection means all registered modules; otherwise keep
+            # the user's requested order for predictable output and progress.
             selected_modules = (
                 request.selected_modules
                 or list(self.modules.keys())
@@ -194,6 +223,7 @@ class ScannerEngine:
 
             for module_name in selected_modules:
 
+                # Do not start another module after a cancellation request.
                 if cancellation_event.is_set():
                     result.status = "cancelled"
                     break
@@ -220,6 +250,8 @@ class ScannerEngine:
                     }
                 )
 
+                # Passive checks are the default. Active modules must declare
+                # this requirement and pass the explicit authorization check.
                 requires_active = getattr(
                     module,
                     "requires_active",
@@ -239,6 +271,8 @@ class ScannerEngine:
                     )
                     continue
 
+                # Isolate failures per module: a failed source or parser should
+                # be recorded without discarding successful results from others.
                 try:
 
                     module_data = module.run(

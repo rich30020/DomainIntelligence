@@ -1,3 +1,5 @@
+"""SQLAlchemy entities for scans, findings, schedules, and screenshot history."""
+
 from datetime import datetime, timezone
 
 from sqlalchemy import (
@@ -14,14 +16,17 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
+    """Base class shared by all SQLAlchemy ORM entities."""
     pass
 
 
 def utc_now():
+    """Return an aware UTC timestamp for consistent persisted time values."""
     return datetime.now(timezone.utc)
 
 
 class ScanRecord(Base):
+    """Persist the lifecycle and identity of one complete scan."""
     __tablename__ = "scan_records"
 
     id: Mapped[int] = mapped_column(
@@ -59,6 +64,8 @@ class ScanRecord(Base):
         nullable=True,
     )
 
+    # Child records belong to the scan; cascading deletes prevent orphaned
+    # module results and findings when a scan record is removed.
     modules: Mapped[list["ModuleRecord"]] = relationship(
         back_populates="scan",
         cascade="all, delete-orphan",
@@ -71,6 +78,7 @@ class ScanRecord(Base):
 
 
 class ModuleRecord(Base):
+    """Persist the status, output, and error of one module execution."""
     __tablename__ = "module_records"
 
     id: Mapped[int] = mapped_column(
@@ -116,6 +124,7 @@ class ModuleRecord(Base):
 
 
 class FindingRecord(Base):
+    """Store normalized indicators extracted from a scan result."""
     __tablename__ = "finding_records"
 
     id: Mapped[int] = mapped_column(
@@ -167,7 +176,7 @@ class FindingRecord(Base):
     )
 
 class ScheduledScanRecord(Base):
-    """Configurazione persistente di una scansione periodica."""
+    """Persist the configuration and latest execution state of a scheduled scan."""
 
     __tablename__ = "scheduled_scan_records"
 
@@ -197,7 +206,7 @@ class ScheduledScanRecord(Base):
 
 
 class ScreenshotRecord(Base):
-    """Metadati persistenti di uno screenshot acquisito con autorizzazione."""
+    """Persist metadata for a screenshot captured after explicit authorization."""
 
     __tablename__ = "screenshot_records"
 

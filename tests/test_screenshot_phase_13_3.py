@@ -1,3 +1,9 @@
+"""test screenshot phase 13 3.
+
+This file contains test helpers or manual checks for the Domain Intelligence
+application. It is kept separate from the production application startup.
+"""
+
 from services.database_service import DatabaseService
 
 
@@ -13,6 +19,9 @@ class FakeCapture:
 
 
 def test_comparison_updates_existing_record_without_duplicate(tmp_path):
+    """Verify expected behavior for comparison updates existing record without duplicate.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     db = DatabaseService(tmp_path / "test.db")
     try:
         saved = db.save_screenshot_record(FakeCapture())
@@ -36,6 +45,9 @@ def test_comparison_updates_existing_record_without_duplicate(tmp_path):
 
 
 def test_get_screenshot_record_returns_detail(tmp_path):
+    """Verify expected behavior for get screenshot record returns detail.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     db = DatabaseService(tmp_path / "test.db")
     try:
         saved = db.save_screenshot_record(FakeCapture())
@@ -47,6 +59,9 @@ def test_get_screenshot_record_returns_detail(tmp_path):
 
 
 def test_update_missing_screenshot_raises(tmp_path):
+    """Verify expected behavior for update missing screenshot raises.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     db = DatabaseService(tmp_path / "test.db")
     try:
         try:

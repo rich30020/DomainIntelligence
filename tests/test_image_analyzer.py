@@ -1,3 +1,9 @@
+"""Automated tests for test image analyzer.
+
+These tests protect the documented behavior of the Domain Intelligence application
+and help detect regressions when implementation details are changed.
+"""
+
 from PIL import Image
 
 from modules.image_hash_analyzer import ImageHashAnalyzer
@@ -6,6 +12,9 @@ from modules.image_similarity_analyzer import ImageSimilarityAnalyzer
 
 
 def test_image_hash_analyzer(tmp_path):
+    """Verify expected behavior for image hash analyzer.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     image_path = tmp_path / "logo.png"
 
     image = Image.new("RGB", (100, 100), "white")
@@ -20,6 +29,9 @@ def test_image_hash_analyzer(tmp_path):
 
 
 def test_identical_image_hashes(tmp_path):
+    """Verify expected behavior for identical image hashes.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     image_path = tmp_path / "logo.png"
 
     image = Image.new("RGB", (100, 100), "white")
@@ -37,6 +49,9 @@ def test_identical_image_hashes(tmp_path):
 
 
 def test_logo_detector(tmp_path):
+    """Verify expected behavior for logo detector.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     image_path = tmp_path / "company_logo.png"
 
     image = Image.new("RGB", (100, 100), "white")
@@ -49,6 +64,9 @@ def test_logo_detector(tmp_path):
 
 
 def test_logo_detector_negative(tmp_path):
+    """Verify expected behavior for logo detector negative.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     image_path = tmp_path / "photo.png"
 
     image = Image.new("RGB", (100, 100), "white")
@@ -60,6 +78,9 @@ def test_logo_detector_negative(tmp_path):
 
 
 def test_image_similarity_identical(tmp_path):
+    """Verify expected behavior for image similarity identical.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     first_path = tmp_path / "first.png"
     second_path = tmp_path / "second.png"
 

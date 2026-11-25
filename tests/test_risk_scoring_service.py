@@ -1,3 +1,9 @@
+"""Automated tests for test risk scoring service.
+
+These tests protect expected behavior and help detect regressions in the
+Domain Intelligence implementation.
+"""
+
 from types import SimpleNamespace
 
 from services.risk_scoring_service import RiskScoringService
@@ -17,6 +23,9 @@ def scan_result_with_threat_data(data, success=True):
 
 
 def test_no_ioc_match_is_not_reported_as_safe():
+    """Verify expected behavior for no ioc match is not reported as safe.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     result = scan_result_with_threat_data({
         "total_matches": 0,
         "results": [
@@ -37,6 +46,9 @@ def test_no_ioc_match_is_not_reported_as_safe():
 
 
 def test_single_ioc_uses_feed_confidence():
+    """Verify expected behavior for single ioc uses feed confidence.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     result = scan_result_with_threat_data({
         "results": [
             {
@@ -62,6 +74,9 @@ def test_single_ioc_uses_feed_confidence():
 
 
 def test_distinct_sources_add_small_bonus_and_cap_at_100():
+    """Verify expected behavior for distinct sources add small bonus and cap at 100.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     result = scan_result_with_threat_data({
         "results": [
             {
@@ -91,6 +106,9 @@ def test_distinct_sources_add_small_bonus_and_cap_at_100():
 
 
 def test_duplicate_same_indicator_and_source_is_deduplicated():
+    """Verify expected behavior for duplicate same indicator and source is deduplicated.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     result = scan_result_with_threat_data({
         "results": [
             {
@@ -120,6 +138,9 @@ def test_duplicate_same_indicator_and_source_is_deduplicated():
 
 
 def test_failed_threat_module_is_not_a_clean_result():
+    """Verify expected behavior for failed threat module is not a clean result.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     result = scan_result_with_threat_data({}, success=False)
 
     assessment = RiskScoringService().calculate(result)
@@ -130,6 +151,9 @@ def test_failed_threat_module_is_not_a_clean_result():
 
 
 def test_missing_threat_module_is_not_a_clean_result():
+    """Verify expected behavior for missing threat module is not a clean result.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     result = SimpleNamespace(domain="example.com", results=[])
 
     assessment = RiskScoringService().calculate(result)
@@ -139,6 +163,9 @@ def test_missing_threat_module_is_not_a_clean_result():
 
 
 def test_dict_scan_result_is_supported():
+    """Verify expected behavior for dict scan result is supported.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     result = {
         "domain": "example.com",
         "results": [

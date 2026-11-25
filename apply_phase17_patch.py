@@ -1,3 +1,5 @@
+"""Apply idempotent source updates required by the Windows packaging workflow."""
+
 """Applica in modo verificato le modifiche minime per la build PyInstaller.
 Eseguire dalla cartella principale del progetto: python apply_phase17_patch.py
 """

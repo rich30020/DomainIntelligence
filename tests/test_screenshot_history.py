@@ -1,9 +1,18 @@
+"""Automated tests for test screenshot history.
+
+These tests protect expected behavior and help detect regressions in the
+Domain Intelligence implementation.
+"""
+
 from datetime import datetime, timezone
 
 from services.database_service import DatabaseService
 
 
 def test_save_and_read_screenshot_history(tmp_path):
+    """Verify expected behavior for save and read screenshot history.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     service = DatabaseService(tmp_path / "screens.db")
     capture = {
         "hostname": "example.com",
@@ -25,6 +34,9 @@ def test_save_and_read_screenshot_history(tmp_path):
 
 
 def test_save_screenshot_comparison_metadata(tmp_path):
+    """Verify expected behavior for save screenshot comparison metadata.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     service = DatabaseService(tmp_path / "screens.db")
     capture = {
         "hostname": "example.org",
@@ -46,6 +58,9 @@ def test_save_screenshot_comparison_metadata(tmp_path):
 
 
 def test_reject_incomplete_screenshot_record(tmp_path):
+    """Verify expected behavior for reject incomplete screenshot record.
+    Arrange the inputs, execute the operation, and assert its observable result.
+    """
     service = DatabaseService(tmp_path / "screens.db")
     try:
         service.save_screenshot_record({"hostname": "example.com"})

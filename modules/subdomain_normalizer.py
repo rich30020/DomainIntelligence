@@ -1,11 +1,12 @@
 
+"""Normalize discovered hostnames and enforce the requested parent-domain boundary."""
+
 class SubdomainNormalizer:
-    """
-    Normalizza e deduplica i sottodomini.
-    """
+    """Normalize and deduplicate subdomain candidates from multiple sources."""
 
     @staticmethod
     def normalize(hostname: str) -> str | None:
+        """Return a lowercase IDNA hostname, or ``None`` when the value is invalid."""
 
         if not isinstance(hostname, str):
             return None

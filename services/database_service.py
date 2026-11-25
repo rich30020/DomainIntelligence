@@ -1,3 +1,5 @@
+"""Persistence layer for scan history, findings, schedules, and screenshots."""
+
 import json
 import re
 
@@ -19,8 +21,15 @@ from models.db_models import (
 
 
 class DatabaseService:
+    """Own the SQLite engine and provide transaction-scoped data operations.
+
+    ORM sessions are opened for individual operations rather than retained
+    between GUI events. This keeps transaction boundaries explicit and makes
+    the service easier to exercise with temporary databases in automated tests.
+    """
 
     def __init__(self, database_path=None):
+        """Initialize SQLite storage and create any missing ORM tables."""
         if database_path is None:
             database_path = (
                 get_writable_dir("data")
@@ -52,6 +61,12 @@ class DatabaseService:
 
     @staticmethod
     def _json_safe(value):
+        """Convert nested application values into JSON-serializable primitives.
+
+        SQLAlchemy JSON columns cannot store datetimes, paths, dataclasses, or
+        arbitrary objects directly. This recursive adapter normalizes those
+        values before a scan result is persisted.
+        """
         if value is None:
             return None
 
@@ -89,6 +104,7 @@ class DatabaseService:
 
     @staticmethod
     def _get(value, field, default=None):
+        """Read a field from either a dictionary or an object instance."""
         if isinstance(value, dict):
             return value.get(field, default)
 
@@ -96,6 +112,7 @@ class DatabaseService:
 
     @staticmethod
     def _parse_datetime(value):
+        """Convert supported ISO timestamp values to ``datetime`` objects."""
         if value is None:
             return None
 
@@ -111,6 +128,11 @@ class DatabaseService:
         return None
 
     def _extract_findings(self, scan_id, module_name, data):
+        """Extract searchable finding rows from selected module output formats.
+
+        The original module payload is retained in ``details`` so the history
+        view can show context while the normalized columns support filtering.
+        """
         if not isinstance(data, dict):
             return []
 
@@ -139,7 +161,7 @@ class DatabaseService:
                 )
             )
 
-        # Sottodomini scoperti
+        # Convert the subdomain module's normalized host entries into findings.
         if module_name == "subdomain_finder":
             for item in data.get("subdomains", []):
                 add(
@@ -150,7 +172,7 @@ class DatabaseService:
                     details=item,
                 )
 
-        # Domini simili
+        # Store candidate lookalikes as leads, not as proof of malicious intent.
         elif module_name == "similar_domain_analyzer":
             for item in data.get("results", []):
                 add(
@@ -162,7 +184,7 @@ class DatabaseService:
                     details=item,
                 )
 
-        # Corrispondenze Threat Intelligence
+        # Persist only explicit IOC matches returned by the threat module.
         elif module_name == "threat_intel_analyzer":
             for item in data.get("results", []):
                 if item.get("matched"):
@@ -181,7 +203,7 @@ class DatabaseService:
                         details=item,
                     )
 
-        # Confronto tra siti
+        # Preserve website-comparison context and its reported similarity score.
         elif module_name == "website_clone_analyzer":
             similarity = data.get("similarity", {})
 
@@ -197,6 +219,11 @@ class DatabaseService:
         return findings
 
     def save_scan_result(self, scan_result):
+        """Persist one scan and its module outputs/findings in one transaction.
+
+        A duplicate scan identifier is rejected to avoid silently overwriting
+        historical evidence. Any exception before commit rolls back the session.
+        """
         scan_id = self._get(scan_result, "scan_id")
 
         if not scan_id:
@@ -241,6 +268,8 @@ class DatabaseService:
                 completed_at=completed_at,
             )
 
+            # Flush the parent row first so child records can reference its ID
+            # and foreign key relationships within the same transaction.
             session.add(record)
             session.flush()
 
@@ -288,6 +317,7 @@ class DatabaseService:
         }
 
     def get_scan_history(self, limit=100):
+        """Return the newest scan summaries, with a defensive result limit."""
         limit = max(1, min(int(limit), 1000))
 
         with self.Session() as session:
@@ -317,6 +347,7 @@ class DatabaseService:
             ]
 
     def get_scan_details(self, scan_id):
+        """Return a complete scan, including module outputs and extracted findings."""
         with self.Session() as session:
             record = session.scalar(
                 select(ScanRecord).where(
@@ -364,7 +395,7 @@ class DatabaseService:
 
     @staticmethod
     def _normalize_utc(value):
-        """Converte un datetime in UTC naive per compatibilità SQLite."""
+        """Convert a timestamp to naive UTC for consistent SQLite storage."""
         if not isinstance(value, datetime):
             raise ValueError("La data deve essere un oggetto datetime.")
         if value.tzinfo is None:
@@ -373,6 +404,7 @@ class DatabaseService:
 
     @staticmethod
     def _schedule_to_dict(item):
+        """Convert a scheduled-scan ORM row to a GUI-friendly dictionary."""
         def iso(value):
             if value is None:
                 return None
@@ -398,6 +430,7 @@ class DatabaseService:
 
     @staticmethod
     def _validate_schedule(domain, selected_modules, interval_minutes):
+        """Normalize and validate the target, module list, and interval bounds."""
         domain = str(domain or "").strip().lower().rstrip(".")
         pattern = (
             r"(?=.{1,253}$)"
@@ -427,6 +460,7 @@ class DatabaseService:
         self, domain, selected_modules, interval_minutes,
         next_run_at=None, name=None, enabled=True,
     ):
+        """Create a recurring schedule after validating its domain and cadence."""
         domain, modules, interval = self._validate_schedule(
             domain, selected_modules, interval_minutes
         )
@@ -451,6 +485,7 @@ class DatabaseService:
             return self._schedule_to_dict(record)
 
     def get_schedules(self, include_disabled=True):
+        """List saved schedules, optionally including disabled entries."""
         with self.Session() as session:
             statement = select(ScheduledScanRecord).order_by(ScheduledScanRecord.id.desc())
             if not include_disabled:
@@ -458,11 +493,13 @@ class DatabaseService:
             return [self._schedule_to_dict(item) for item in session.scalars(statement).all()]
 
     def get_schedule(self, schedule_id):
+        """Return one schedule by database ID, or ``None`` when absent."""
         with self.Session() as session:
             item = session.get(ScheduledScanRecord, int(schedule_id))
             return self._schedule_to_dict(item) if item else None
 
     def update_schedule(self, schedule_id, **changes):
+        """Update allowed schedule fields after revalidating the full configuration."""
         allowed = {"name", "domain", "selected_modules", "interval_minutes", "enabled", "next_run_at"}
         unknown = set(changes) - allowed
         if unknown:
@@ -496,9 +533,11 @@ class DatabaseService:
             return self._schedule_to_dict(item)
 
     def set_schedule_enabled(self, schedule_id, enabled):
+        """Convenience wrapper for toggling one schedule's enabled state."""
         return self.update_schedule(schedule_id, enabled=enabled)
 
     def delete_schedule(self, schedule_id):
+        """Delete one schedule and report whether a record was found."""
         with self.Session() as session:
             item = session.get(ScheduledScanRecord, int(schedule_id))
             if item is None:
@@ -508,6 +547,7 @@ class DatabaseService:
             return True
 
     def get_due_schedules(self, now=None):
+        """Return enabled schedules whose next-run timestamp is due."""
         reference = self._normalize_utc(now or datetime.now(timezone.utc))
         with self.Session() as session:
             statement = (
@@ -543,7 +583,7 @@ class DatabaseService:
 
 
     def save_screenshot_record(self, capture_result, comparison=None):
-        """Salva metadati e percorso locale di uno screenshot acquisito."""
+        """Persist screenshot metadata and the local path to the captured image."""
         def get_value(name, default=None):
             if isinstance(capture_result, dict):
                 return capture_result.get(name, default)
@@ -576,7 +616,7 @@ class DatabaseService:
 
 
     def update_screenshot_comparison(self, record_id, comparison):
-        """Aggiorna il confronto sul record acquisizione esistente, senza duplicarlo."""
+        """Update comparison metadata on the existing capture record without duplicating it."""
         if not isinstance(comparison, dict):
             raise TypeError("comparison deve essere un dizionario.")
         with self.Session() as session:
@@ -592,13 +632,14 @@ class DatabaseService:
             return self._screenshot_to_dict(item)
 
     def get_screenshot_record(self, record_id):
-        """Restituisce il dettaglio di una singola acquisizione."""
+        """Return the persisted metadata for one screenshot capture."""
         with self.Session() as session:
             item = session.get(ScreenshotRecord, int(record_id))
             return self._screenshot_to_dict(item) if item is not None else None
 
     @staticmethod
     def _screenshot_to_dict(item):
+        """Serialize screenshot history fields for use by GUI widgets."""
         return {
             "id": item.id,
             "domain": item.domain,
@@ -616,6 +657,7 @@ class DatabaseService:
         }
 
     def get_screenshot_history(self, limit=100):
+        """Return the newest screenshot records with a defensive row limit."""
         limit = max(1, min(int(limit), 1000))
         with self.Session() as session:
             items = session.scalars(
@@ -626,4 +668,5 @@ class DatabaseService:
             return [self._screenshot_to_dict(item) for item in items]
 
     def close(self):
+        """Dispose the SQLAlchemy engine and release its database connections."""
         self.engine.dispose()

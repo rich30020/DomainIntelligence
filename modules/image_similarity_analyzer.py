@@ -1,8 +1,11 @@
 
+"""Compare local images using perceptual hash distances."""
+
 from modules.image_hash_analyzer import ImageHashAnalyzer
 
 
 class ImageSimilarityAnalyzer:
+    """Compare local image files without uploading them to external services."""
     name = "image_similarity_analyzer"
     requires_active = False
 
@@ -10,6 +13,7 @@ class ImageSimilarityAnalyzer:
         self.hash_analyzer = ImageHashAnalyzer()
 
     def compare(self, first_path: str, second_path: str) -> dict:
+        """Calculate multiple perceptual-hash distances for two image paths."""
         first = self.hash_analyzer.analyze(first_path)
         second = self.hash_analyzer.analyze(second_path)
 
@@ -47,6 +51,7 @@ class ImageSimilarityAnalyzer:
         }
 
     def run(self, context, cancellation_event):
+        """Read both image paths from metadata and return comparison metrics."""
         if cancellation_event.is_set():
             return {"cancelled": True}
 
